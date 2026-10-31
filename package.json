@@ -1,0 +1,15 @@
+{
+  "name": "astralingo",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "dev": "node scripts/dev.mjs",
+    "backend": "npm --prefix backend run dev:local",
+    "mobile": "npm --prefix mobile start",
+    "web": "npm --prefix mobile run web",
+    "check": "npm --prefix backend run typecheck && npm --prefix mobile run typecheck",
+    "test": "npm --prefix backend test"
+  },
+  "engines": { "node": ">=22.12.0" }
+}

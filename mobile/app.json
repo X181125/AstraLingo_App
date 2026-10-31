@@ -1,0 +1,11 @@
+{
+  "expo": {
+    "name": "AstraLingo", "slug": "astralingo", "scheme": "astralingo",
+    "version": "0.1.0", "orientation": "portrait", "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": { "supportsTablet": true, "bundleIdentifier": "com.astralingo.app" },
+    "android": { "package": "com.astralingo.app", "edgeToEdgeEnabled": true },
+    "web": { "bundler": "metro", "output": "single", "name": "AstraLingo" },
+    "plugins": ["expo-router", "expo-secure-store", "expo-font"]
+  }
+}

@@ -1,0 +1,9 @@
+node_modules
+.expo
+dist
+dist-android
+.env
+.env.*
+*.log
+android
+ios
