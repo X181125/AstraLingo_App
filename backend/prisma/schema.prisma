@@ -1,0 +1,94 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  nativeLang   String   @default("vi")
+  targetLang   String   @default("en")
+  level        String   @default("A1")
+  tokenVersion Int      @default(0)
+  createdAt    DateTime @default(now())
+  reset        PasswordReset?
+  enrollments  Enrollment[]
+}
+
+model PasswordReset {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String
+  expiresAt DateTime
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+model Category {
+  id      String   @id
+  name    String
+  icon    String
+  color   String
+  order   Int      @default(0)
+  courses Course[]
+}
+
+model Course {
+  id           String       @id
+  title        String
+  description  String
+  language     String       @default("en")
+  level        String
+  minutes      Int
+  lessonsCount Int
+  accent       String
+  illustration String
+  featured     Boolean      @default(false)
+  categoryId   String
+  category     Category     @relation(fields: [categoryId], references: [id])
+  lessons      ContentItem[]
+  enrollments  Enrollment[]
+  @@index([categoryId, level])
+}
+
+enum ContentType {
+  READING
+  LISTENING
+  SPEAKING
+  WRITING
+}
+
+enum ContentStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model ContentItem {
+  id          String        @id
+  courseId    String
+  course      Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title       String
+  contentType ContentType
+  status      ContentStatus @default(PUBLISHED)
+  order       Int
+  minutes     Int
+  preview     String
+  @@index([courseId, order])
+}
+
+model Enrollment {
+  userId    String
+  courseId  String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  @@id([userId, courseId])
+}

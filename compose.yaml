@@ -1,0 +1,72 @@
+name: astralingo
+
+x-api-env: &api-env
+  DATABASE_URL: postgresql://astralingo:${POSTGRES_PASSWORD:?Run node scripts/docker-setup.mjs first}@postgres:5432/astralingo?schema=public
+  JWT_SECRET: ${JWT_SECRET:?Run node scripts/docker-setup.mjs first}
+  NODE_ENV: ${NODE_ENV:-development}
+  PORT: 4000
+  TRUST_PROXY_HOPS: 1
+  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080}
+  MAIL_MODE: ${MAIL_MODE:-console}
+  MAIL_FROM: ${MAIL_FROM:-AstraLingo <no-reply@example.com>}
+  SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_USER: ${SMTP_USER:-}
+  SMTP_PASS: ${SMTP_PASS:-}
+
+services:
+  postgres:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: astralingo
+      POSTGRES_USER: astralingo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run node scripts/docker-setup.mjs first}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U astralingo -d astralingo"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    build:
+      context: ./backend
+      target: migrate
+    environment:
+      <<: *api-env
+      SEED_DEMO: ${SEED_DEMO:-false}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  backend:
+    build:
+      context: ./backend
+      target: runtime
+    environment: *api-env
+    volumes:
+      - local_mail:/app/.local
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    init: true
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./mobile
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  local_mail:

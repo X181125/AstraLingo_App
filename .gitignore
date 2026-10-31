@@ -35,3 +35,19 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Expo / Node
+node_modules/
+.expo/
+dist/
+web-build/
+dist-android/
+coverage/
+.env
+.env.local
+.env.*.local
+!.env.example
+!.env.docker.example
+backend/.local/
+artifacts/
+*.dump
