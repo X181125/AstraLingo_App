@@ -99,3 +99,6 @@ docker compose exec postgres pg_isready -U astralingo -d astralingo
 - Đã chạy thành công `docker-smoke.mjs --restart` với `TEST_BASE_URL=http://localhost:8082`: route web, đăng ký, lọc khóa học, ghi danh; sau restart PostgreSQL/API/Nginx, tài khoản, ghi danh và JWT vẫn hoạt động. Đây là kiểm tra HTTP/API, chưa phải kiểm thử thao tác giao diện trên điện thoại.
 
 Tham khảo: https://docs.docker.com/compose/how-tos/startup-order/
+
+
+Cập nhật review 05/11/2026: xem [REVIEW.md](REVIEW.md) cho kết quả audit mới (backend còn 4 high, mobile 18 mục) và kiểm thử bổ sung; Nodemailer đã nâng 10.3.1. Số audit trong mục ghi ngày 31/10 phía trên là kết quả lịch sử.

@@ -10,7 +10,9 @@ import { seed } from '../prisma/seed-data.js';
 
 if (process.env.NODE_ENV === 'production') throw new Error('dev:local is only for local development.');
 console.info('Khởi động PostgreSQL local (lần đầu có thể mất khoảng một phút)...');
-const local = await startPrismaDevServer({ name: 'astralingo-nt118', port: 51213, databasePort: 51214, shadowDatabasePort: 51215, persistenceMode: 'stateful' });
+const basePort = Number(process.env.LOCAL_DB_PORT || 15213);
+if (!Number.isInteger(basePort) || basePort < 1024 || basePort > 65533) throw new Error('LOCAL_DB_PORT must be between 1024 and 65533.');
+const local = await startPrismaDevServer({ name: 'astralingo-nt118', port: basePort, databasePort: basePort + 1, shadowDatabasePort: basePort + 2, persistenceMode: 'stateful' });
 process.env.DATABASE_URL = local.database.connectionString;
 process.env.JWT_SECRET ||= randomBytes(48).toString('hex');
 const db = new PrismaClient();

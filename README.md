@@ -3,6 +3,10 @@
 Ứng dụng học ngôn ngữ cho đồ án **NT118 – Lập trình ứng dụng di động**.
 Phần 1 triển khai React Native/Expo và Express theo tài liệu mô tả đã thống nhất.
 
+## Review và bản mobile thử nghiệm
+
+Xem [REVIEW.md](REVIEW.md) để biết lỗi đã sửa và rủi ro còn lại. [FIREBASE-MOBILE.md](FIREBASE-MOBILE.md) hướng dẫn build APK bằng EAS và phân phối qua Firebase App Distribution.
+
 ## Docker frontend, backend và PostgreSQL
 
 Đã có Dockerfile multi-stage và Compose cho cả ba phần. Xem [DOCKER.md](DOCKER.md) để chạy bằng `docker compose up --build -d`, kiểm tra persistence, backup và kết nối từ điện thoại. Database Docker riêng với database local bên dưới; không tự di chuyển dữ liệu cũ. Đã build và chạy thực tế bằng Docker Desktop, kiểm tra API qua Nginx và xác nhận tài khoản/ghi danh/JWT còn hoạt động sau restart. Trên máy hiện tại dùng http://localhost:8082 vì cổng 8080 đã được dịch vụ khác sử dụng.
@@ -118,7 +122,7 @@ backend/                   Express 5, TypeScript
 scripts/                   Cài đặt và chạy cả dự án
 ```
 
-Database local sử dụng **Prisma Dev / PGlite**, một môi trường PostgreSQL tương thích dành cho phát triển, không phải SQLite của ứng dụng. Prisma truy cập qua giao thức PostgreSQL. Dữ liệu local được Prisma lưu trong thư mục ứng dụng của người dùng, không trong repo. Cổng: API 4000, Expo 8081, Prisma local 51213–51215. Đây không phải cấu hình database cho production; local chỉ xử lý một kết nối tại một thời điểm.
+Database local sử dụng **Prisma Dev / PGlite**, một môi trường PostgreSQL tương thích dành cho phát triển, không phải SQLite của ứng dụng. Prisma truy cập qua giao thức PostgreSQL. Dữ liệu local được Prisma lưu trong thư mục ứng dụng của người dùng, không trong repo. Cổng: API 4000, Expo 8081, Prisma local 15213–15215. Đây không phải cấu hình database cho production; local chỉ xử lý một kết nối tại một thời điểm.
 
 Backend dùng bcrypt (cost 12), JWT HS256 có issuer/audience và tokenVersion, validation Zod, Helmet và giới hạn tốc độ. Native lưu JWT bằng **Expo Secure Store**; web preview dùng **sessionStorage**, đóng tab sẽ mất phiên. JWT có hạn 7 ngày; chưa triển khai refresh token. Email verification chưa thuộc phần này.
 

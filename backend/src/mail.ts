@@ -6,12 +6,13 @@ export type SendReset = (email: string, code: string) => Promise<void>;
 export function createMailer(config: Config): SendReset {
   const smtp = config.MAIL_MODE === 'smtp' ? nodemailer.createTransport({
     host: config.SMTP_HOST, port: config.SMTP_PORT, secure: config.SMTP_PORT === 465,
+    requireTLS: true,
     auth: { user: config.SMTP_USER, pass: config.SMTP_PASS },
     connectionTimeout: 10_000, socketTimeout: 15_000,
   }) : null;
   return async (email, code) => {
     if (smtp) {
-      await smtp.sendMail({ from: config.MAIL_FROM, to: email,
+      await smtp.sendMail({ from: config.MAIL_FROM, to: { name: '', address: email },
         subject: 'Mã đặt lại mật khẩu AstraLingo',
         text: `Mã xác nhận của bạn: ${code}\nMã có hiệu lực trong 10 phút và chỉ dùng một lần. Nếu bạn không yêu cầu, hãy bỏ qua email này.`,
       });

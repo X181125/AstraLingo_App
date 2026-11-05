@@ -13,8 +13,9 @@ export default function Profile() {
   const auth = useAuth();
   const [courses, setCourses] = useState<Enrollment[]>([]), [error, setError] = useState(''), [loading, setLoading] = useState(true), [refresh, setRefresh] = useState(0);
   useFocusEffect(useCallback(() => {
-    let active = true; setLoading(true); setError('');
-    api<Enrollment[]>('/me/enrollments', { token: auth.token }).then(v => { if (active) setCourses(v); }).catch(e => { if (active) setError(e.message); if (e instanceof ApiError && e.status === 401) void auth.logout(); }).finally(() => { if (active) setLoading(false); });
+    if (!auth.token) return;
+    let active = true; setLoading(true); setError(''); setCourses([]);
+    api<Enrollment[]>('/me/enrollments', { token: auth.token }).then(v => { if (active) setCourses(v); }).catch(e => { if (active) setError(e.message); if (active && e instanceof ApiError && e.status === 401) void auth.expire(auth.token); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [auth.token, refresh]));
   return <SafeAreaView edges={['top']} style={{ flex: 1 }}><ScrollView contentContainerStyle={{ padding: 26, width: '100%', maxWidth: 660, alignSelf: 'center', gap: 22 }}>

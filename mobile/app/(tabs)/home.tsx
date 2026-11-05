@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useAuth } from '../../src/auth';
-import { api, ApiError } from '../../src/api';
+import { api } from '../../src/api';
 import type { Category, Course } from '../../src/types';
 import { colors as c, heading } from '../../src/theme';
 import { Brand, Button, Notice } from '../../components/UI';
@@ -21,24 +21,29 @@ export default function Home() {
   const [level, setLevel] = useState(''), [filters, setFilters] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]), [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true), [refresh, setRefresh] = useState(0), [error, setError] = useState(''), [total, setTotal] = useState(0);
+  const filterKey = JSON.stringify([debounced, category, level]);
+  const [pagination, setPagination] = useState({ key: '', page: 1 });
+  const page = pagination.key === filterKey ? pagination.page : 1;
+  const [hasMore, setHasMore] = useState(false);
+  const reload = () => { setPagination({ key: filterKey, page: 1 }); setRefresh(n => n + 1); };
   useEffect(() => { const id = setTimeout(() => setDebounced(query.trim()), 350); return () => clearTimeout(id); }, [query]);
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true); setError('');
-    const params = new URLSearchParams({ limit: '50', q: debounced });
+    const params = new URLSearchParams({ limit: '12', page: String(page), q: debounced });
     if (category) params.set('category', category);
     if (level) params.set('level', level);
-    Promise.all([api<Category[]>('/categories', { signal: controller.signal }), api<{ items: Course[]; total: number }>(`/courses?${params}`, { signal: controller.signal })])
-      .then(([cats, result]) => { if (!controller.signal.aborted) { setCategories(cats); setCourses(result.items); setTotal(result.total); } })
+    Promise.all([api<Category[]>('/categories', { signal: controller.signal }), api<{ items: Course[]; total: number; hasMore: boolean }>(`/courses?${params}`, { signal: controller.signal })])
+      .then(([cats, result]) => { if (!controller.signal.aborted) { setCategories(cats); setCourses(previous => page === 1 ? result.items : [...previous, ...result.items.filter(item => !previous.some(old => old.id === item.id))]); setTotal(result.total); setHasMore(result.hasMore); } })
       .catch(e => { if (!controller.signal.aborted) setError((e as Error).message); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [debounced, category, level, refresh]);
+  }, [debounced, category, level, refresh, page]);
   const filtered = !!(debounced || category || level);
   const reset = () => { setQuery(''); setDebounced(''); setCategory(''); setLevel(''); };
   const firstName = auth.user?.name.split(' ').at(-1) ?? 'bạn';
   return <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: c.paper }}>
-    <ScrollView ref={scroll} keyboardShouldPersistTaps="handled" refreshControl={<RefreshControl refreshing={loading && refresh > 0} onRefresh={() => setRefresh(n => n + 1)} tintColor={c.purple} />} contentContainerStyle={{ alignItems: 'center', paddingBottom: 26 }}>
+    <ScrollView ref={scroll} keyboardShouldPersistTaps="handled" refreshControl={<RefreshControl refreshing={loading && refresh > 0} onRefresh={reload} tintColor={c.purple} />} contentContainerStyle={{ alignItems: 'center', paddingBottom: 26 }}>
       <View style={[st.container, wide && { paddingHorizontal: 36 }]}>
         <View style={st.header}><Brand small /><Pressable accessibilityRole="button" accessibilityLabel="Mở hồ sơ cá nhân" onPress={() => router.push('/(tabs)/profile')} style={st.avatar}><Text style={st.avatarText}>{firstName.slice(0, 1).toUpperCase()}</Text><View style={st.online} /></Pressable></View>
         <View style={st.greeting}><View><Text style={st.hello}>Chào {firstName}, một ngày thật vui <Text style={{ color: '#D79D4B' }}>☀</Text></Text><Text style={st.title}>Hôm nay bạn muốn{wide ? ' ' : '\n'}khám phá điều gì?</Text></View><View style={st.languagePill}><Ionicons name="globe-outline" size={15} color={c.purple} /><Text style={st.languageText}>{auth.user?.level} · English</Text></View></View>
@@ -54,6 +59,7 @@ export default function Home() {
         <View style={[st.sectionHead, { marginTop: 28 }]}><View><Text style={st.sectionTitle}>{filtered ? 'Kết quả khám phá' : 'Khóa học dành cho bạn'}</Text><Text style={st.sectionSub}>{loading ? 'Đang tìm những điều thú vị...' : `${total} khóa học ${filtered ? 'phù hợp' : 'để bắt đầu hành trình'}`}</Text></View>{filtered && <Pressable accessibilityRole="button" onPress={reset}><Text style={st.reset}>Xóa bộ lọc</Text></Pressable>}</View>
         {!!(level) && <Text style={{ color: c.purple, fontSize: 12, marginBottom: 14 }}>{`Trình độ ${level} · Tiếng Anh`}</Text>}
         {!!error ? <View style={{ gap: 12 }}><Notice message={error} /><Button secondary label="Thử tải lại" onPress={() => setRefresh(n => n + 1)} /></View> : loading ? <View style={{ padding: 50 }}><ActivityIndicator color={c.purple} /><Text style={{ color: c.muted, textAlign: 'center', marginTop: 12, fontSize: 12 }}>Đang tải khóa học...</Text></View> : courses.length ? <View style={st.grid}>{courses.map(course => <CourseCard key={course.id} course={course} width={wide ? '31.8%' : width < 370 ? '100%' : '48%'} />)}</View> : <View style={st.empty}><Ionicons name="telescope-outline" size={42} color="#B4A2D7" /><Text style={st.emptyTitle}>Chưa tìm thấy khóa học</Text><Text style={st.emptyText}>Thử một từ khóa khác hoặc bỏ bớt bộ lọc nhé.</Text><Button secondary label="Xem tất cả khóa học" onPress={reset} /></View>}
+        {!loading && !error && hasMore && <Button secondary label="Xem thêm khóa học" onPress={() => setPagination({ key: filterKey, page: page + 1 })} />}
         <View style={st.bottomNote}><Ionicons name="heart-outline" size={14} color="#A99ABC" /><Text style={st.bottomText}>Học chậm một chút cũng được. Miễn là bạn tiếp tục.</Text></View>
       </View>
     </ScrollView>
