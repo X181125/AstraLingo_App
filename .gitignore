@@ -44,6 +44,7 @@ web-build/
 dist-android/
 coverage/
 .env
+.env.*
 .env.local
 .env.*.local
 !.env.example
@@ -51,3 +52,7 @@ coverage/
 backend/.local/
 artifacts/
 *.dump
+credentials.json
+service-account*.json
+*.p12
+.firebase/

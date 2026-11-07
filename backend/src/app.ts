@@ -5,7 +5,7 @@ import { rateLimit } from 'express-rate-limit';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { compare, hash } from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { createHmac, randomInt } from 'node:crypto';
+import { createHmac, randomInt, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { Config } from './config.js';
 import type { SendReset } from './mail.js';
@@ -25,6 +25,8 @@ export function createApp(db: PrismaClient, config: Config, sendReset: SendReset
   // Enable only with the single trusted Nginx hop; Compose does not publish API ports.
   if (config.TRUST_PROXY_HOPS) app.set('trust proxy', config.TRUST_PROXY_HOPS);
   app.use(helmet());
+  // Authenticated API responses must never be cached by browsers or shared proxies.
+  app.use('/api', (_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
   const origins = config.CORS_ORIGINS.split(',').map(s => s.trim());
   app.use(cors({ origin(origin, cb) {
     const local = config.NODE_ENV !== 'production' && /^http:\/\/(localhost|127\.0\.0\.1|10\.[\d.]+|192\.168\.[\d.]+|172\.(1[6-9]|2\d|3[01])\.[\d.]+):\d+$/.test(origin ?? '');
@@ -36,7 +38,7 @@ export function createApp(db: PrismaClient, config: Config, sendReset: SendReset
     message: { error: { status: 429, message: 'Bạn thử quá nhiều lần. Vui lòng thử lại sau 15 phút.' } } });
   const resetLimit = rateLimit({ windowMs: 60 * 60_000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false,
     message: { error: { status: 429, message: 'Đã đạt giới hạn yêu cầu mã. Vui lòng thử lại sau.' } } });
-  app.use('/api/auth', authLimit);
+  app.use(['/api/auth/register', '/api/auth/login', '/api/auth/forgot-password', '/api/auth/reset-password'], authLimit);
   const digest = (address: string, code: string) => createHmac('sha256', config.JWT_SECRET).update(`${address}:${code}`).digest('hex');
   const token = (user: { id: string; tokenVersion: number }) => jwt.sign({ ver: user.tokenVersion }, config.JWT_SECRET, {
     subject: user.id, expiresIn: '7d', issuer: 'astralingo', audience: 'astralingo-app', algorithm: 'HS256',
@@ -67,7 +69,7 @@ export function createApp(db: PrismaClient, config: Config, sendReset: SendReset
     ok(res, { user: safe, token: token(user) }, 201);
   });
   app.post('/api/auth/login', async (req, res) => {
-    const input = z.object({ email, password: z.string().min(1).max(200) }).parse(req.body);
+    const input = z.object({ email, password: z.string().min(1).refine(value => Buffer.byteLength(value, 'utf8') <= 72, 'Mật khẩu quá dài (tối đa 72 byte).') }).parse(req.body);
     const user = await db.user.findUnique({ where: { email: input.email } });
     // A fixed valid bcrypt hash keeps missing-account comparisons on the same slow path.
     const valid = await compare(input.password, user?.passwordHash ?? '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYwAQJC0vBaIvTUsWEIWRWgvJm6R8jB.');
@@ -79,12 +81,21 @@ export function createApp(db: PrismaClient, config: Config, sendReset: SendReset
   });
   app.post('/api/auth/forgot-password', resetLimit, async (req, res) => {
     const input = z.object({ email }).parse(req.body);
-    const user = await db.user.findUnique({ where: { email: input.email }, include: { reset: true } });
-    if (user && (!user.reset || Date.now() - user.reset.createdAt.getTime() >= 60_000)) {
+    const user = await db.user.findUnique({ where: { email: input.email } });
+    if (user) {
       const code = randomInt(100000, 1000000).toString();
       const codeHash = digest(input.email, code);
       const data = { codeHash, expiresAt: new Date(Date.now() + 10 * 60_000), attempts: 0, createdAt: new Date() };
-      await db.passwordReset.upsert({ where: { userId: user.id }, create: { userId: user.id, ...data }, update: data });
+      // One atomic statement claims the resend window across processes without long-lived locks.
+      const issued = await db.$queryRaw<{ id: string }[]>`
+        INSERT INTO "PasswordReset" ("id", "userId", "codeHash", "expiresAt", "attempts", "createdAt")
+        VALUES (${randomUUID()}, ${user.id}, ${codeHash}, ${data.expiresAt}, 0, ${data.createdAt})
+        ON CONFLICT ("userId") DO UPDATE SET
+          "codeHash" = EXCLUDED."codeHash", "expiresAt" = EXCLUDED."expiresAt",
+          "attempts" = 0, "createdAt" = EXCLUDED."createdAt"
+        WHERE "PasswordReset"."createdAt" <= EXCLUDED."createdAt" - INTERVAL '60 seconds'
+        RETURNING "id"`;
+      if (!issued.length) return ok(res, { message: genericReset });
       try { await sendReset(input.email, code); }
       catch (err) {
         await db.passwordReset.deleteMany({ where: { userId: user.id, codeHash } });
@@ -114,7 +125,7 @@ export function createApp(db: PrismaClient, config: Config, sendReset: SendReset
     ok(res, { message: 'Đã đổi mật khẩu. Bạn có thể đăng nhập lại.' });
   });
   app.get('/api/categories', async (_req, res) => {
-    ok(res, await db.category.findMany({ orderBy: { order: 'asc' }, include: { _count: { select: { courses: true } } } }));
+    ok(res, await db.category.findMany({ orderBy: { order: 'asc' }, include: { _count: { select: { courses: { where: { language: 'en' } } } } } }));
   });
   app.get('/api/courses', async (req, res) => {
     const q = z.object({ q: z.string().trim().max(100).default(''), category: z.string().max(30).optional(),
@@ -133,15 +144,15 @@ export function createApp(db: PrismaClient, config: Config, sendReset: SendReset
   });
   app.get('/api/courses/:id', async (req, res) => {
     const course = await db.course.findUnique({ where: { id: String(req.params.id) }, include: { category: true, lessons: { where: { status: 'PUBLISHED' }, orderBy: { order: 'asc' } } } });
-    if (!course) throw new ApiError(404, 'Không tìm thấy khóa học.');
+    if (!course || course.language !== 'en') throw new ApiError(404, 'Không tìm thấy khóa học.');
     ok(res, course);
   });
   app.get('/api/me/enrollments', authenticated, async (_req, res) => {
-    ok(res, await db.enrollment.findMany({ where: { userId: res.locals.user.id }, include: { course: { include: { category: true } } }, orderBy: { createdAt: 'desc' } }));
+    ok(res, await db.enrollment.findMany({ where: { userId: res.locals.user.id, course: { language: 'en' } }, include: { course: { include: { category: true } } }, orderBy: { createdAt: 'desc' } }));
   });
   app.post('/api/courses/:id/enroll', authenticated, async (req, res) => {
     const courseId = String(req.params.id);
-    if (!await db.course.findUnique({ where: { id: courseId } })) throw new ApiError(404, 'Không tìm thấy khóa học.');
+    if (!await db.course.findFirst({ where: { id: courseId, language: 'en' } })) throw new ApiError(404, 'Không tìm thấy khóa học.');
     const userId = res.locals.user.id as string;
     ok(res, await db.enrollment.upsert({ where: { userId_courseId: { userId, courseId } }, create: { userId, courseId }, update: {} }));
   });
@@ -152,7 +163,7 @@ export function createApp(db: PrismaClient, config: Config, sendReset: SendReset
     if (error instanceof SyntaxError && 'body' in error) return res.status(400).json({ error: { status: 400, message: 'Dữ liệu JSON không hợp lệ.' } });
     if (error instanceof Error && 'type' in error && error.type === 'entity.too.large') return res.status(413).json({ error: { status: 413, message: 'Dữ liệu gửi lên quá lớn.' } });
     if (error instanceof ApiError) return res.status(error.status).json({ error: { status: error.status, message: error.message } });
-    console.error('API error:', error instanceof Error ? error.name : 'Unknown');
+    console.error('API error:', error instanceof Error ? error.name : 'Unknown', error instanceof Prisma.PrismaClientKnownRequestError ? error.code : '');
     res.status(500).json({ error: { status: 500, message: 'Máy chủ đang gặp lỗi. Vui lòng thử lại.' } });
   });
   return app;

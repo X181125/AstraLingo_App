@@ -9,7 +9,9 @@
     "mobile": "npm --prefix mobile start",
     "web": "npm --prefix mobile run web",
     "check": "npm --prefix backend run typecheck && npm --prefix mobile run typecheck",
-    "test": "npm --prefix backend test"
+    "test": "npm --prefix backend test && npm --prefix mobile test"
   },
-  "engines": { "node": ">=22.12.0" }
+  "engines": {
+    "node": ">=22.12.0"
+  }
 }

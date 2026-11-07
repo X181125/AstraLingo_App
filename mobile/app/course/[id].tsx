@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,18 +13,22 @@ import { Artwork } from '../../components/Artwork';
 export default function CourseDetail() {
   const { id } = useLocalSearchParams<{ id: string }>(), auth = useAuth();
   const [course, setCourse] = useState<Course | null>(null), [error, setError] = useState(''), [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [enrolled, setEnrolled] = useState(false), [expanded, setExpanded] = useState(''), [retry, setRetry] = useState(0);
+  const requestVersion = useRef(0);
   useEffect(() => {
+    ++requestVersion.current;
     if (!auth.token) return;
-    let active = true; setLoading(true); setError('');
-    Promise.all([api<Course>(`/courses/${encodeURIComponent(id)}`), api<Enrollment[]>('/me/enrollments', { token: auth.token })]).then(([data, list]) => { if (active) { setCourse(data); setEnrolled(list.some(x => x.courseId === id)); } }).catch(e => { if (active) setError(e.message); if (e instanceof ApiError && e.status === 401) void auth.logout(); }).finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
+    let active = true; setLoading(true); setError(''); setCourse(null); setEnrolled(false); setExpanded(''); setBusy(false);
+    Promise.all([api<Course>(`/courses/${encodeURIComponent(id)}`), api<Enrollment[]>('/me/enrollments', { token: auth.token })]).then(([data, list]) => { if (active) { setCourse(data); setEnrolled(list.some(x => x.courseId === id)); } }).catch(e => { if (active) setError(e.message); if (active && e instanceof ApiError && e.status === 401) void auth.expire(auth.token); }).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; ++requestVersion.current; };
   }, [id, auth.token, retry]);
   if (!auth.loading && !auth.user) return <Redirect href="/login" />;
   async function enroll() {
-    if (busy) return; setBusy(true); setError('');
-    try { await api(`/courses/${id}/enroll`, { method: 'POST', token: auth.token }); setEnrolled(true); }
-    catch (e) { setError((e as Error).message); if (e instanceof ApiError && e.status === 401) await auth.logout(); }
-    finally { setBusy(false); }
+    if (busy) return;
+    const version = requestVersion.current;
+    setBusy(true); setError('');
+    try { await api(`/courses/${encodeURIComponent(id)}/enroll`, { method: 'POST', token: auth.token }); if (version === requestVersion.current) setEnrolled(true); }
+    catch (e) { if (version !== requestVersion.current) return; setError((e as Error).message); if (e instanceof ApiError && e.status === 401) await auth.expire(auth.token); }
+    finally { if (version === requestVersion.current) setBusy(false); }
   }
   return <SafeAreaView style={{ flex: 1, backgroundColor: c.paper }}><ScrollView contentContainerStyle={st.container}>
     <Pressable accessibilityRole="button" accessibilityLabel="Quay về Trang chủ" onPress={() => router.replace('/(tabs)/home')} style={st.back}><Ionicons name="arrow-back" size={20} color={c.ink} /><Text style={{ color: c.muted, fontSize: 12 }}>Khám phá khóa học</Text></Pressable>

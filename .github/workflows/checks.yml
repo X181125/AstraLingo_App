@@ -1,0 +1,44 @@
+name: Auth, Home and Docker checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-bookworm
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: ci-test-only
+          POSTGRES_DB: astralingo_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U test -d astralingo_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            mobile/package-lock.json
+      - run: npm ci --prefix backend && npm ci --prefix mobile
+      - run: npm --prefix backend run db:generate && npm run check
+      - run: npm test
+        env:
+          TEST_DATABASE_URL: postgresql://test:ci-test-only@localhost:5432/astralingo_test
+      - run: node scripts/docker-setup.mjs && docker compose up --build -d --wait
+      - run: node scripts/docker-smoke.mjs --restart
+      - name: Container diagnostics
+        if: failure()
+        run: docker compose ps -a && docker compose logs --tail=80
+      - name: Stop CI containers
+        if: always()
+        run: docker compose down
