@@ -24,6 +24,8 @@ for (const path of ['/login', '/register', '/forgot-password', '/home', '/course
   const r = await fetch(base + path);
   assert.equal(r.status, 200); assert.match(r.headers.get('content-type') || '', /text\/html/);
 }
+const missingDownload = await fetch(`${base}/downloads/not-a-release.apk`);
+assert.equal(missingDownload.status, 404, 'Missing downloads must bypass the Expo SPA fallback');
 const email = `docker-smoke-${Date.now()}@example.test`, password = randomBytes(16).toString('hex');
 const session = await call('/auth/register', { method: 'POST', body: { name: 'Docker smoke test', email, password } });
 const filtered = await call('/courses?category=reading&level=A2'); assert.equal(filtered.total, 1);
