@@ -62,6 +62,8 @@ services:
       context: ./mobile
     ports:
       - "${WEB_PORT:-8080}:80"
+    volumes:
+      - "${ASTRALINGO_APK_DIR:-./artifacts/android}:/srv/astralingo/downloads:ro"
     depends_on:
       backend:
         condition: service_healthy

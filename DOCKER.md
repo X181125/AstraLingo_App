@@ -73,6 +73,44 @@ Giữ file dump ngoài Git. Việc restore nên làm vào database riêng trư�
 - Không dùng hostname `backend`/`postgres` trong app điện thoại; các hostname đó chỉ dùng trong mạng Docker.
 - Image frontend chứa bản **web**; APK/iOS vẫn phải build bằng Expo/EAS riêng.
 
+## Phát hành APK Android trên website
+
+Trang đăng nhập hiển thị liên kết tải trên trình duyệt máy tính khi Nginx phục vụ được APK. Đặt bản release đã ký của `com.astralingo.app` vào thư mục riêng trên VPS, ví dụ `/srv/astralingo/android-releases`. Frontend gắn thư mục này ở chế độ chỉ đọc, nên rebuild container vẫn giữ được APK.
+
+1. Xác nhận domain HTTPS hiện tại đang chuyển tiếp tới dịch vụ `frontend`. Xác định đường dẫn bản APK release đã build. Nếu có Android SDK Build Tools, kiểm tra chữ ký bằng `apksigner verify --print-certs "$apk_release"` và đối chiếu chứng chỉ phát hành.
+2. Trong thư mục triển khai Compose hiện tại, thêm `ASTRALINGO_APK_DIR=/srv/astralingo/android-releases` vào `.env` đang dùng. Nếu bỏ qua biến này, Compose dùng `./artifacts/android` cạnh `compose.yaml`.
+3. Chép bản APK đã xác nhận vào thư mục đó với tên `astralingo-release.apk`. Ghi vào tên tạm rồi đổi tên trong cùng thư mục để các lượt tải đang chạy đọc hết bản cũ.
+
+```bash
+apk_release=/duong/dan/ban-release-da-ky.apk
+apk_dir=/srv/astralingo/android-releases
+test -s "$apk_release" &&
+  install -d -m 0755 "$apk_dir" &&
+  install -m 0644 "$apk_release" "$apk_dir/.astralingo-release.apk.new" &&
+  mv -f "$apk_dir/.astralingo-release.apk.new" "$apk_dir/astralingo-release.apk"
+```
+
+Sau khi cập nhật mã nguồn trên VPS, chạy các lệnh sau với cùng thư mục, tùy chọn Compose và `.env` của stack đang chạy. `--no-deps` giới hạn việc cập nhật ở dịch vụ web.
+
+```bash
+docker compose config --quiet
+docker compose build frontend
+docker compose run --rm --no-deps frontend nginx -t
+docker compose up -d --no-deps --wait frontend
+```
+
+Kiểm tra từ ngoài VPS qua domain HTTPS thực tế. Lệnh `curl` phải trả HTTP 200 với `Content-Type: application/vnd.android.package-archive` và `Content-Disposition: attachment; filename="AstraLingo.apk"`. `Content-Length`, nếu có, phải bằng số byte của bản release. Chạy `cmp` trên máy có bản release gốc để xác nhận toàn bộ nội dung trùng khớp.
+
+```bash
+site_url=https://DOMAIN-HIEN-TAI
+curl --fail --silent --show-error -D - -o AstraLingo.apk \
+  "$site_url/downloads/astralingo-release.apk"
+test -s AstraLingo.apk && cmp "$apk_release" AstraLingo.apk
+curl --fail --silent --show-error "$site_url/api/health"
+```
+
+Mở `/login` trong cửa sổ chưa đăng nhập trên máy tính và thử bấm tải. Thử lại trên điện thoại ở cả hai hướng màn hình để xác nhận khu vực tải được ẩn. Khi cập nhật bản release, lặp lại bước chép và xác minh tệp với cùng đường dẫn. Nếu APK chưa được đặt vào thư mục, Nginx trả 404 cho đường dẫn tải.
+
 ## Chẩn đoán
 
 ```powershell

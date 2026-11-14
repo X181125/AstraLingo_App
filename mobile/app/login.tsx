@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
+import { AndroidDownloadBanner } from '../components/AndroidDownloadBanner';
 import { AuthShell, Button, Field, Notice, s } from '../components/UI';
 import { useAuth } from '../src/auth';
 import { colors as c } from '../src/theme';
@@ -25,6 +26,7 @@ export default function Login() {
       <Notice message={error} /><Button label="Đăng nhập" icon="arrow-forward" loading={busy} onPress={submit} />
     </View>
     <View style={s.centerRow}><Text style={{ color: c.muted, fontSize: 13 }}>Chưa có tài khoản?</Text><Pressable accessibilityRole="link" onPress={() => router.push('/register')}><Text style={s.link}>Đăng ký ngay</Text></Pressable></View>
+    <AndroidDownloadBanner />
     {__DEV__ && <View style={{ marginTop: 24, padding: 13, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', borderColor: '#DAD2EB', gap: 5 }}><Text style={{ fontSize: 10, fontWeight: '700', letterSpacing: 1, color: c.muted }}>TÀI KHOẢN CHẠY THỬ</Text><Text selectable style={{ fontSize: 12, color: '#766C88' }}>demo@astralingo.app · Astra@12345</Text><Pressable accessibilityRole="button" onPress={() => { setEmail('demo@astralingo.app'); setPassword('Astra@12345'); }}><Text style={[s.link, { marginTop: 3, fontSize: 12 }]}>Điền tài khoản mẫu ↗</Text></Pressable></View>}
   </AuthShell>;
 }
