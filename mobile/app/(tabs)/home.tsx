@@ -23,7 +23,8 @@ export default function Home() {
   const [loading, setLoading] = useState(true), [refresh, setRefresh] = useState(0), [error, setError] = useState(''), [total, setTotal] = useState(0);
   const filterKey = JSON.stringify([debounced, category, level]);
   const [pagination, setPagination] = useState({ key: '', page: 1 });
-  const page = pagination.key === filterKey ? pagination.page : 1;
+  if (pagination.key !== filterKey) setPagination({ key: filterKey, page: 1 });
+  const page = pagination.page;
   const [hasMore, setHasMore] = useState(false);
   const reload = () => { setPagination({ key: filterKey, page: 1 }); setRefresh(n => n + 1); };
   useEffect(() => { const id = setTimeout(() => setDebounced(query.trim()), 350); return () => clearTimeout(id); }, [query]);

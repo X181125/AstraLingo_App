@@ -9,7 +9,15 @@ const KEY = 'astralingo.session';
 const storage = {
   get: async () => Platform.OS === 'web' ? (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(KEY) : null) : SecureStore.getItemAsync(KEY),
   set: async (value: string) => { if (Platform.OS === 'web') sessionStorage.setItem(KEY, value); else await SecureStore.setItemAsync(KEY, value); },
-  remove: async () => { if (Platform.OS === 'web') sessionStorage.removeItem(KEY); else await SecureStore.deleteItemAsync(KEY); },
+  remove: async () => {
+    try {
+      if (Platform.OS === 'web') sessionStorage.removeItem(KEY);
+      else await SecureStore.deleteItemAsync(KEY);
+    } catch {
+      // A blank value cannot be restored as a token if deletion fails.
+      await storage.set('');
+    }
+  },
 };
 type Context = { user: User | null; token: string | null; loading: boolean; connectionError: string; retry: () => void; login: (email: string, password: string) => Promise<void>; register: (name: string, email: string, password: string) => Promise<void>; logout: () => Promise<void>; expire: (failedToken: string | null) => Promise<void> };
 const AuthContext = createContext<Context | null>(null);
@@ -17,6 +25,7 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
   const [user, setUser] = useState<User | null>(null), [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true), [connectionError, setConnectionError] = useState(''), [attempt, setAttempt] = useState(0);
   const revision = useRef(0), currentToken = useRef<string | null>(null);
+  const storageClearPending = useRef(false);
   const storageQueue = useRef<Promise<unknown>>(Promise.resolve());
   function store(task: () => Promise<unknown>) {
     const next = storageQueue.current.then(task);
@@ -24,12 +33,24 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
     return next;
   }
   async function logout() {
-    ++revision.current;
+    const version = ++revision.current;
+    storageClearPending.current = true;
     currentToken.current = null;
-    setToken(null); setUser(null); setLoading(false); setConnectionError('');
-    await store(() => storage.remove());
+    setToken(null); setUser(null); setLoading(true); setConnectionError('');
+    try {
+      await store(() => storage.remove());
+      if (version === revision.current) storageClearPending.current = false;
+    } catch {
+      if (version === revision.current) setConnectionError('Không thể xóa phiên đăng nhập trên thiết bị. Hãy thử lại.');
+    } finally {
+      if (version === revision.current) setLoading(false);
+    }
   }
   useEffect(() => {
+    if (storageClearPending.current) {
+      void logout();
+      return;
+    }
     let active = true;
     const version = revision.current;
     const valid = () => active && version === revision.current;
@@ -46,7 +67,12 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
         if (error instanceof ApiError && error.status === 401) {
           currentToken.current = null; setToken(null); setUser(null);
           try { await store(() => storage.remove()); }
-          catch { if (valid()) setConnectionError('Không thể xóa phiên cũ trên thiết bị. Hãy thử lại.'); }
+          catch {
+            if (valid()) {
+              storageClearPending.current = true;
+              setConnectionError('Không thể xóa phiên cũ trên thiết bị. Hãy thử lại.');
+            }
+          }
         } else setConnectionError(error instanceof Error ? error.message : 'Không thể khôi phục phiên đăng nhập.');
       } finally { if (valid()) setLoading(false); }
     })();
@@ -59,6 +85,7 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
     if (version !== revision.current) throw new Error('Phiên đã thay đổi. Vui lòng đăng nhập lại.');
     await store(() => version === revision.current ? storage.set(result.token) : Promise.resolve());
     if (version !== revision.current) throw new Error('Phiên đã thay đổi. Vui lòng đăng nhập lại.');
+    storageClearPending.current = false;
     currentToken.current = result.token; setToken(result.token); setUser(result.user); setConnectionError('');
   }
   return <AuthContext.Provider value={{ user, token, loading, connectionError, retry: () => setAttempt(n => n + 1),
@@ -67,7 +94,7 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
     logout,
     expire: async failedToken => {
       if (!failedToken || failedToken !== currentToken.current) return;
-      try { await logout(); } catch { setConnectionError('Phiên đã hết hạn nhưng chưa xóa được trên thiết bị. Hãy thử lại.'); }
+      await logout();
     },
   }}>{children}</AuthContext.Provider>;
 }

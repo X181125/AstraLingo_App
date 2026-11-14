@@ -27,3 +27,27 @@ test('trailing slash, authorization and cancellation', async () => {
     await assert.rejects(createApiClient('/api')('/courses', { signal: controller.signal }), { name: 'AbortError' });
   } finally { globalThis.fetch = original; }
 });
+
+test('a null success body is reported as a protocol error', async () => {
+  const original = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => Response.json({ success: true, data: null });
+    await assert.rejects(createApiClient('/api')('/auth/me'), e => e instanceof ApiError && e.status === 200);
+  } finally { globalThis.fetch = original; }
+});
+
+test('cancellation while reading a successful response remains an AbortError', async () => {
+  const original = globalThis.fetch;
+  const controller = new AbortController();
+  try {
+    globalThis.fetch = async (_url, options) => {
+      const response = new Response(null);
+      response.json = () => new Promise((_resolve, reject) => {
+        options?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
+        controller.abort();
+      });
+      return response;
+    };
+    await assert.rejects(createApiClient('/api')('/courses', { signal: controller.signal }), { name: 'AbortError' });
+  } finally { globalThis.fetch = original; }
+});
