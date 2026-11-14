@@ -6,7 +6,7 @@ test('preview build rejects missing/local API and preserves the linked Expo proj
   const profile = process.env.EAS_BUILD_PROFILE, address = process.env.EXPO_PUBLIC_API_URL;
   try {
     process.env.EAS_BUILD_PROFILE = 'preview';
-    for (const value of ['', '/api', 'http://api.example.test/api', 'https://localhost/api', 'https://192.168.1.4/api']) {
+    for (const value of ['', '/api', 'http://api.example.test/api', 'https://localhost/api', 'https://192.168.1.4/api', 'https://172.16.0.1/api', 'https://api.example.test', 'https://api.example.test/api/typo', 'https://app.localhost/api', 'https://[::ffff:127.0.0.1]/api']) {
       process.env.EXPO_PUBLIC_API_URL = value;
       assert.throws(() => configure({ config: {} }), /public HTTPS/);
     }

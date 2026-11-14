@@ -85,20 +85,25 @@ export function createApp(db: PrismaClient, config: Config, sendReset: SendReset
     if (user) {
       const code = randomInt(100000, 1000000).toString();
       const codeHash = digest(input.email, code);
-      const data = { codeHash, expiresAt: new Date(Date.now() + 10 * 60_000), attempts: 0, createdAt: new Date() };
+      const createdAt = new Date();
+      const expiresAt = new Date(+createdAt + 10 * 60_000);
+      const id = randomUUID();
       // One atomic statement claims the resend window across processes without long-lived locks.
+      // Explicit UTC matches Prisma's timestamp columns. Allow replacing legacy rows dated far in the future.
       const issued = await db.$queryRaw<{ id: string }[]>`
         INSERT INTO "PasswordReset" ("id", "userId", "codeHash", "expiresAt", "attempts", "createdAt")
-        VALUES (${randomUUID()}, ${user.id}, ${codeHash}, ${data.expiresAt}, 0, ${data.createdAt})
+        VALUES (${id}, ${user.id}, ${codeHash}, ${expiresAt}::timestamptz AT TIME ZONE 'UTC', 0, ${createdAt}::timestamptz AT TIME ZONE 'UTC')
         ON CONFLICT ("userId") DO UPDATE SET
+          "id" = EXCLUDED."id",
           "codeHash" = EXCLUDED."codeHash", "expiresAt" = EXCLUDED."expiresAt",
           "attempts" = 0, "createdAt" = EXCLUDED."createdAt"
         WHERE "PasswordReset"."createdAt" <= EXCLUDED."createdAt" - INTERVAL '60 seconds'
+           OR "PasswordReset"."createdAt" > EXCLUDED."createdAt" + INTERVAL '60 seconds'
         RETURNING "id"`;
       if (!issued.length) return ok(res, { message: genericReset });
       try { await sendReset(input.email, code); }
       catch (err) {
-        await db.passwordReset.deleteMany({ where: { userId: user.id, codeHash } });
+        await db.passwordReset.deleteMany({ where: { id } });
         // Do not expose account existence or SMTP credentials in the response/log.
         console.error('Password reset delivery failed; check SMTP configuration.');
       }
@@ -106,22 +111,30 @@ export function createApp(db: PrismaClient, config: Config, sendReset: SendReset
     ok(res, { message: genericReset });
   });
   app.post('/api/auth/reset-password', async (req, res) => {
+    const startedAt = new Date();
     const input = z.object({ email, code: z.string().regex(/^\d{6}$/, 'Mã xác nhận gồm 6 chữ số.'), password }).parse(req.body);
-    const user = await db.user.findUnique({ where: { email: input.email } });
-    if (!user) throw new ApiError(400, 'Mã không đúng, đã hết hạn hoặc đã dùng.');
+    const user = await db.user.findUnique({ where: { email: input.email }, select: { id: true, reset: true } });
+    const reset = user?.reset;
+    const invalidCode = new ApiError(400, 'Mã không đúng, đã hết hạn hoặc đã dùng.');
+    if (!user || !reset || reset.createdAt > startedAt || reset.expiresAt <= new Date() || reset.attempts >= 5) throw invalidCode;
     const codeHash = digest(input.email, input.code);
+    const currentReset = { id: reset.id, createdAt: reset.createdAt, codeHash: reset.codeHash };
+    if (codeHash !== reset.codeHash) {
+      await db.passwordReset.updateMany({
+        where: { ...currentReset, expiresAt: { gt: new Date() }, attempts: { lt: 5 } },
+        data: { attempts: { increment: 1 } },
+      });
+      throw invalidCode;
+    }
     const passwordHash = await hash(input.password, 12);
     const claimed = await db.$transaction(async tx => {
       // Atomic consumption: two requests cannot reuse the same code.
-      const removed = await tx.passwordReset.deleteMany({ where: { userId: user.id, codeHash, expiresAt: { gt: new Date() }, attempts: { lt: 5 } } });
-      if (!removed.count) {
-        await tx.passwordReset.updateMany({ where: { userId: user.id, attempts: { lt: 5 } }, data: { attempts: { increment: 1 } } });
-        return false;
-      }
+      const removed = await tx.passwordReset.deleteMany({ where: { ...currentReset, expiresAt: { gt: new Date() }, attempts: { lt: 5 } } });
+      if (!removed.count) return false;
       await tx.user.update({ where: { id: user.id }, data: { passwordHash, tokenVersion: { increment: 1 } } });
       return true;
     });
-    if (!claimed) throw new ApiError(400, 'Mã không đúng, đã hết hạn hoặc đã dùng.');
+    if (!claimed) throw invalidCode;
     ok(res, { message: 'Đã đổi mật khẩu. Bạn có thể đăng nhập lại.' });
   });
   app.get('/api/categories', async (_req, res) => {
@@ -154,7 +167,12 @@ export function createApp(db: PrismaClient, config: Config, sendReset: SendReset
     const courseId = String(req.params.id);
     if (!await db.course.findFirst({ where: { id: courseId, language: 'en' } })) throw new ApiError(404, 'Không tìm thấy khóa học.');
     const userId = res.locals.user.id as string;
-    ok(res, await db.enrollment.upsert({ where: { userId_courseId: { userId, courseId } }, create: { userId, courseId }, update: {} }));
+    try {
+      ok(res, await db.enrollment.create({ data: { userId, courseId } }));
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error;
+      ok(res, await db.enrollment.findUniqueOrThrow({ where: { userId_courseId: { userId, courseId } } }));
+    }
   });
   app.use((_req, _res) => { throw new ApiError(404, 'API không tồn tại.'); });
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {

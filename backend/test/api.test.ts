@@ -151,3 +151,80 @@ test('non-English courses are excluded from detail, enrollment and category coun
   await request(instance).post('/api/courses/hidden-other-language/enroll').set('Authorization', `Bearer ${session.body.data.token}`).expect(404);
   assert.deepEqual((await request(instance).get('/api/categories')).body.data, before);
 });
+
+test('concurrent normalized signup and enrollment preserve unique ownership', async () => {
+  const instance = createApp(db, testConfig(), async () => {});
+  const password = 'Unique@12345';
+  const registrations = await Promise.all([' Concurrent-Owner@EXAMPLE.test ', 'concurrent-owner@example.test'].map(email =>
+    request(instance).post('/api/auth/register').send({ name: 'Nguyễn 😃', email, password })));
+  assert.deepEqual(registrations.map(r => r.status).sort(), [201, 409]);
+  const { token, user } = registrations.find(r => r.status === 201)!.body.data;
+  assert.equal(user.email, 'concurrent-owner@example.test');
+  const enrollments = await Promise.all(Array.from({ length: 6 }, () =>
+    request(instance).post('/api/courses/english-first-steps/enroll').set('Authorization', `Bearer ${token}`)));
+  assert.deepEqual(enrollments.map(r => r.status), [200, 200, 200, 200, 200, 200]);
+  assert.equal(await db.enrollment.count({ where: { userId: user.id } }), 1);
+});
+
+test('a reset request started before a resend cannot penalize the replacement OTP', async () => {
+  const address = 'reset-rotation@example.test';
+  const user = await db.user.create({ data: { email: address, name: 'Reset Rotation', passwordHash: 'unused' } });
+  const oldCode = '123456';
+  const newCode = '654321';
+  const codeHash = (code: string) => createHmac('sha256', secret).update(`${address}:${code}`).digest('hex');
+  await db.passwordReset.create({ data: {
+    userId: user.id, codeHash: codeHash(oldCode), createdAt: new Date(Date.now() - 61_000), expiresAt: new Date(Date.now() + 300_000),
+  } });
+  const updateObserved = db.$extends({ query: { user: { async findUnique({ args, query }) {
+    const result = await query(args);
+    if (args.where.email === address) {
+      await db.passwordReset.update({ where: { userId: user.id }, data: { codeHash: codeHash(newCode), createdAt: new Date() } });
+    }
+    return result;
+  } } } }) as unknown as PrismaClient;
+  const instance = createApp(updateObserved, testConfig(), async () => {});
+  await request(instance).post('/api/auth/reset-password').send({ email: address, code: oldCode, password: 'Changed@12345' }).expect(400);
+  assert.equal((await db.passwordReset.findUniqueOrThrow({ where: { userId: user.id } })).attempts, 0);
+});
+
+test('reset TTL and resend cooldown use UTC even in a non-UTC database session', async () => {
+  const url = new URL(process.env.DATABASE_URL!);
+  url.searchParams.set('connection_limit', '1');
+  const session = new PrismaClient({ datasourceUrl: url.toString() });
+  try {
+    await session.$executeRaw`SET TIME ZONE 'Asia/Ho_Chi_Minh'`;
+    const user = await session.user.create({ data: { email: 'reset-tz@example.test', name: 'Time Zone', passwordHash: 'unused' } });
+    const codes: string[] = [];
+    const instance = createApp(session, testConfig(), async (_email, code) => { codes.push(code); });
+    const before = Date.now();
+    const send = () => request(instance).post('/api/auth/forgot-password').send({ email: user.email }).expect(200);
+    await send();
+    const reset = await session.passwordReset.findUniqueOrThrow({ where: { userId: user.id } });
+    assert.ok(+reset.createdAt >= before && +reset.createdAt <= Date.now());
+    assert.equal(+reset.expiresAt - +reset.createdAt, 600_000);
+    await send();
+    assert.equal(codes.length, 1);
+    await session.passwordReset.update({ where: { id: reset.id }, data: { createdAt: new Date(Date.now() - 61_000) } });
+    await send();
+    assert.equal(codes.length, 2);
+    assert.notEqual((await session.passwordReset.findUniqueOrThrow({ where: { userId: user.id } })).id, reset.id);
+  } finally {
+    await session.$disconnect();
+  }
+});
+
+test('SMTP failure gives the same public response and permits retry', async () => {
+  const user = await db.user.create({ data: { email: 'reset-mail@example.test', name: 'Mail Retry', passwordHash: 'unused' } });
+  let sends = 0;
+  const instance = createApp(db, testConfig(), async () => {
+    if (++sends === 1) throw new Error('injected transport failure');
+  });
+  const send = (email: string) => request(instance).post('/api/auth/forgot-password').send({ email }).expect(200);
+  const missing = await send('not-registered@example.test');
+  const failure = await send(user.email);
+  assert.deepEqual(failure.body, missing.body);
+  assert.equal(await db.passwordReset.findUnique({ where: { userId: user.id } }), null);
+  await send(user.email);
+  assert.equal(sends, 2);
+  assert.ok(await db.passwordReset.findUnique({ where: { userId: user.id } }));
+});

@@ -17,12 +17,15 @@ export function createApiClient(baseUrl: string, requireHttps = false) {
         ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
       });
       // Nginx can return HTML for 413/502; preserve the HTTP status.
-      const payload = await response.json().catch(() => null);
+      const payload = await response.json().catch(error => {
+        if (controller.signal.aborted) throw error;
+        return null;
+      });
       if (!response.ok) {
         const fallback = response.status === 413 ? 'Dữ liệu gửi lên quá lớn.' : response.status === 429 ? 'Bạn thử quá nhiều lần. Vui lòng thử lại sau.' : 'Máy chủ chưa xử lý được yêu cầu. Vui lòng thử lại.';
         throw new ApiError(typeof payload?.error?.message === 'string' ? payload.error.message : fallback, response.status);
       }
-      if (!payload || payload.success !== true || !Object.prototype.hasOwnProperty.call(payload, 'data')) throw new ApiError('Phản hồi từ máy chủ không hợp lệ.', response.status);
+      if (payload?.success !== true || payload.data == null) throw new ApiError('Phản hồi từ máy chủ không hợp lệ.', response.status);
       return payload.data as T;
     } catch (error) {
       if (error instanceof ApiError || options.signal?.aborted) throw error;
