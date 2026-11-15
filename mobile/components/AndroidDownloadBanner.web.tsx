@@ -5,43 +5,22 @@ import { colors as c, heading } from '../src/theme';
 
 const apkUrl = '/downloads/astralingo-release.apk';
 const apkType = 'application/vnd.android.package-archive';
-const desktopQuery = '(min-width: 900px) and (hover: hover) and (pointer: fine)';
 
 export function AndroidDownloadBanner() {
   const [available, setAvailable] = useState(false);
 
   useEffect(() => {
-    const { userAgent, maxTouchPoints } = window.navigator;
-    // iPadOS can identify as macOS when it requests the desktop site.
-    if (/Android|iPhone|iPad|iPod|Mobile/i.test(userAgent) ||
-        (/Macintosh/.test(userAgent) && maxTouchPoints > 1)) return;
-
-    const desktop = window.matchMedia(desktopQuery);
-    let request: AbortController | undefined;
-
-    function checkDownload() {
-      request?.abort();
-      setAvailable(false);
-      if (!desktop.matches) return;
-
-      const { signal } = (request = new AbortController());
-      void fetch(apkUrl, { method: 'HEAD', cache: 'no-store', redirect: 'error', signal })
-        .then(response => {
-          const size = response.headers.get('content-length');
-          if (!signal.aborted) {
-            setAvailable(response.status === 200 && response.headers.get('content-type') === apkType &&
-              (size === null || Number(size) > 0));
-          }
-        })
-        .catch(() => { /* Keep the link hidden when the download is unavailable. */ });
-    }
-
-    desktop.addEventListener('change', checkDownload);
-    checkDownload();
-    return () => {
-      desktop.removeEventListener('change', checkDownload);
-      request?.abort();
-    };
+    const request = new AbortController();
+    void fetch(apkUrl, { method: 'HEAD', cache: 'no-store', redirect: 'error', signal: request.signal })
+      .then(response => {
+        const size = response.headers.get('content-length');
+        if (!request.signal.aborted) {
+          setAvailable(response.status === 200 && response.headers.get('content-type') === apkType &&
+            (size === null || Number(size) > 0));
+        }
+      })
+      .catch(() => { /* Keep the link hidden when the download is unavailable. */ });
+    return () => request.abort();
   }, []);
 
   if (!available) return null;
