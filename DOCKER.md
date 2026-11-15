@@ -75,7 +75,7 @@ Giữ file dump ngoài Git. Việc restore nên làm vào database riêng trư�
 
 ## Phát hành APK Android trên website
 
-Trang đăng nhập hiển thị liên kết tải trên trình duyệt máy tính khi Nginx phục vụ được APK. Đặt bản release đã ký của `com.astralingo.app` vào thư mục riêng trên VPS, ví dụ `/srv/astralingo/android-releases`. Frontend gắn thư mục này ở chế độ chỉ đọc, nên rebuild container vẫn giữ được APK.
+Trang đăng nhập hiển thị liên kết tải trên trình duyệt máy tính và điện thoại khi Nginx phục vụ được APK. Tệp APK dùng để cài trên Android. Đặt bản release đã ký của `com.astralingo.app` vào thư mục riêng trên VPS, ví dụ `/srv/astralingo/android-releases`. Frontend gắn thư mục này ở chế độ chỉ đọc, nên rebuild container vẫn giữ được APK.
 
 1. Xác nhận domain HTTPS hiện tại đang chuyển tiếp tới dịch vụ `frontend`. Xác định đường dẫn bản APK release đã build. Nếu có Android SDK Build Tools, kiểm tra chữ ký bằng `apksigner verify --print-certs "$apk_release"` và đối chiếu chứng chỉ phát hành.
 2. Trong thư mục triển khai Compose hiện tại, thêm `ASTRALINGO_APK_DIR=/srv/astralingo/android-releases` vào `.env` đang dùng. Nếu bỏ qua biến này, Compose dùng `./artifacts/android` cạnh `compose.yaml`.
@@ -109,7 +109,7 @@ test -s AstraLingo.apk && cmp "$apk_release" AstraLingo.apk
 curl --fail --silent --show-error "$site_url/api/health"
 ```
 
-Mở `/login` trong cửa sổ chưa đăng nhập trên máy tính và thử bấm tải. Thử lại trên điện thoại ở cả hai hướng màn hình để xác nhận khu vực tải được ẩn. Khi cập nhật bản release, lặp lại bước chép và xác minh tệp với cùng đường dẫn. Nếu APK chưa được đặt vào thư mục, Nginx trả 404 cho đường dẫn tải.
+Mở `/login` trong cửa sổ chưa đăng nhập trên máy tính và điện thoại để kiểm tra nút tải. Trên điện thoại Android, thử tải tệp qua nút này. Khi cập nhật bản release, lặp lại bước chép và xác minh tệp với cùng đường dẫn. Nếu APK chưa được đặt vào thư mục, Nginx trả 404 cho đường dẫn tải và trang đăng nhập ẩn nút.
 
 ## Chẩn đoán
 
