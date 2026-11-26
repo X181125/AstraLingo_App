@@ -56,3 +56,6 @@ credentials.json
 service-account*.json
 *.p12
 .firebase/
+
+/integrations/language-learning-reform/
+/integrations/.reform-stage-*/
