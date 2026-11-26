@@ -12,13 +12,19 @@ const browser = await chromium.launch(process.env.CHROMIUM_EXECUTABLE
 const sessionKey = 'astralingo.session';
 const button = (page, name) => page.getByRole('button', { name, exact: true });
 
-async function register(page) {
+async function register(page, completeOnboarding = false) {
   await page.goto(new URL('/register', base).href);
   await page.getByLabel('Tên của bạn', { exact: true }).fill('Web regression');
   await page.getByLabel('Email', { exact: true }).fill(`web-regression-${randomUUID()}@example.test`);
   await page.getByLabel('Mật khẩu', { exact: true }).fill('Regression@12345');
   await page.getByLabel('Nhập lại mật khẩu', { exact: true }).fill('Regression@12345');
   await button(page, 'Tạo tài khoản').click();
+  await page.waitForURL('**/onboarding');
+  if (completeOnboarding) {
+    for (let step = 1; step < 7; step++) await button(page, 'Tiếp tục').click();
+    await button(page, 'Hoàn tất thiết lập').click();
+    await button(page, 'Vào trang chủ').click();
+  } else await button(page, 'Để sau').click();
   await page.waitForURL('**/home');
 }
 
@@ -73,9 +79,69 @@ async function verifyPagination() {
   } finally { await context.close(); }
 }
 
+async function verifyLearning() {
+  const context = await browser.newContext();
+  try {
+    const page = await context.newPage();
+    await register(page, true);
+    await page.goto(new URL('/study', base).href);
+    await button(page, 'Mini Quiz').click();
+    await page.getByRole('button', { name: /Grammar/i }).first().click();
+    await button(page, 'Submit exam').click();
+    await button(page, 'Submit now').click();
+    await page.getByText('0% correct', { exact: true }).waitFor();
+    await button(page, 'View exam history').click();
+    await page.waitForURL('**/study/exam/history');
+
+    await page.goto(new URL('/practice/english-first-steps-1', base).href);
+    await button(page, 'Da Nang').click();
+    await button(page, 'Plays badminton').click();
+    await button(page, 'Nộp đáp án').click();
+    await page.getByRole('heading', { name: '100/100 · 2/2 câu đúng' }).waitFor();
+
+    await page.goto(new URL('/practice/english-first-steps-4', base).href);
+    await page.getByLabel('Bài viết của bạn', { exact: true }).fill('I walk to class in the morning. I read at home after lunch.');
+    await button(page, 'Lưu bản nháp').click();
+    await button(page, 'Tiếp tục bản nháp').click();
+    await button(page, 'Nộp bài').click();
+    await page.getByText('Đã nộp bài. Bạn có thể xem lại trong lịch sử.', { exact: true }).first().waitFor();
+
+    await page.goto(new URL('/dictionary', base).href);
+    await page.getByLabel('Từ hoặc câu tiếng Anh').fill('garden');
+    await button(page, 'Tìm trong từ điển').click();
+    await page.getByText('garden · Khu vườn', { exact: true }).waitFor();
+    await button(page, 'Lưu từ').first().click();
+    await button(page, 'Từ đã lưu').click();
+    await page.getByText('garden · Khu vườn', { exact: true }).waitFor();
+
+    await page.goto(new URL('/flashcards', base).href);
+    await page.getByLabel('Tên bộ thẻ').fill('Reading words');
+    await button(page, 'Tạo bộ thẻ').click();
+    await page.getByLabel('Mặt trước').fill('garden');
+    await page.getByLabel('Mặt sau').fill('khu vườn');
+    await button(page, 'Thêm thẻ').click();
+    await button(page, 'Ôn thẻ đến hạn').click();
+    await button(page, 'Lật thẻ').click();
+    await button(page, 'Nhớ được').click();
+    await page.getByText('0 thẻ đến hạn · 1/1 thẻ đã ôn', { exact: true }).waitFor();
+
+    await page.goto(new URL('/profile', base).href);
+    await page.getByText('1 ngày liên tiếp · 2 bài đã nộp', { exact: true }).waitFor();
+    await button(page, 'Chỉnh sửa hồ sơ').click();
+    await page.getByLabel('Tên hiển thị').fill('Learning Preview');
+    await button(page, 'Tối').click();
+    await button(page, 'Lưu hồ sơ').click();
+    await page.getByText('Đã lưu hồ sơ.', { exact: true }).waitFor();
+    await page.goto(new URL('/profile', base).href);
+    await page.getByText('Learning Preview', { exact: true }).waitFor();
+    console.log('PASS: onboarding, Quiz, Reading, Writing, Dictionary, Flashcards and persisted progress');
+  } finally { await context.close(); }
+}
+
 try {
   await verifyLogout();
   await verifyPagination();
+  await verifyLearning();
 } finally {
   await browser.close();
 }

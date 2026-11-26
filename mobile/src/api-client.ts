@@ -1,7 +1,7 @@
 export class ApiError extends Error {
   constructor(message: string, public status: number) { super(message); }
 }
-export type ApiOptions = { method?: string; body?: unknown; token?: string | null; signal?: AbortSignal };
+export type ApiOptions = { method?: string; body?: unknown; token?: string | null; signal?: AbortSignal; timeoutMs?: number };
 export function createApiClient(baseUrl: string, requireHttps = false) {
   return async function api<T>(path: string, options: ApiOptions = {}): Promise<T> {
     if (!baseUrl || (requireHttps && !/^https:\/\//i.test(baseUrl))) throw new ApiError('Bản ứng dụng chưa được cấu hình địa chỉ API HTTPS. Liên hệ người cung cấp bản cài.', 0);
@@ -9,7 +9,7 @@ export function createApiClient(baseUrl: string, requireHttps = false) {
     const abort = () => controller.abort();
     options.signal?.addEventListener('abort', abort);
     if (options.signal?.aborted) controller.abort();
-    const timeout = setTimeout(abort, 15_000);
+    const timeout = setTimeout(abort, options.timeoutMs ?? 15_000);
     try {
       const response = await fetch(`${baseUrl.replace(/\/+$/, '')}${path}`, {
         method: options.method ?? 'GET', signal: controller.signal,

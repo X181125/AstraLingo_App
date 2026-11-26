@@ -1,3 +1,4 @@
+import { recordStudy } from './study.js';
 import { officialPapers } from "./services/officialPapers.js";
 import { liveQuizzes, loadLiveQuiz, soundSets } from "./services/grammarExam.js";
 import { createHash } from "node:crypto";
@@ -68,9 +69,13 @@ export function examRoutes(prisma: PrismaClient, authenticateToken: RequestHandl
   async function finish(attempt: ExamAttempt): Promise<ExamAttempt> {
     const exam = attempt.snapshot as unknown as Exam;
     const correct = exam.questions.filter((q, index) => q.correct === attempt.answers[index]).length;
-    const updated = await prisma.examAttempt.updateMany({
-      where: { id: attempt.id, revision: attempt.revision, submittedAt: null },
-      data: { submittedAt: new Date(), openKey: null, correct, revision: { increment: 1 } },
+    const updated = await prisma.$transaction(async tx => {
+      const change = await tx.examAttempt.updateMany({
+        where: { id: attempt.id, revision: attempt.revision, submittedAt: null },
+        data: { submittedAt: new Date(), openKey: null, correct, revision: { increment: 1 } },
+      });
+      if (change.count) await recordStudy(tx, attempt.userId);
+      return change;
     });
     const latest = await prisma.examAttempt.findUniqueOrThrow({ where: { id: attempt.id } });
     if (!updated.count && !latest.submittedAt) return finish(latest);

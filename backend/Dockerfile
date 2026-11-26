@@ -6,6 +6,7 @@ COPY prisma ./prisma
 RUN npm ci --no-audit --no-fund
 COPY tsconfig.json ./
 COPY src ./src
+COPY resources ./resources
 COPY scripts ./scripts
 COPY test ./test
 RUN npx prisma generate && npm run build
@@ -25,6 +26,7 @@ ENV NODE_ENV=production
 COPY --from=production-deps --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
 COPY --from=build --chown=node:node /app/package.json ./package.json
+COPY --from=build --chown=node:node /app/resources ./resources
 COPY --chown=node:node preview-media ./preview-media
 RUN mkdir -p /app/.local && chown node:node /app/.local
 USER node

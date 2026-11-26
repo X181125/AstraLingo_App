@@ -5,7 +5,7 @@ RUN npm ci --no-audit --no-fund
 COPY . .
 ENV EXPO_PUBLIC_API_URL=/api
 ENV CI=1
-RUN npm run typecheck && npm run export:web
+RUN npm run typecheck && npm run export:web -- --max-workers 2
 
 FROM nginx:stable-alpine AS runtime
 COPY nginx.conf /etc/nginx/conf.d/default.conf

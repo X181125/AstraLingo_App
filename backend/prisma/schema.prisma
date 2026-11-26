@@ -8,10 +8,12 @@ datasource db {
 }
 
 model User {
+  examAttempts ExamAttempt[]
   id           String   @id @default(cuid())
   email        String   @unique
   name         String
   passwordHash String
+  avatarUrl    String?
   nativeLang   String   @default("vi")
   targetLang   String   @default("en")
   level        String   @default("A1")
@@ -19,7 +21,20 @@ model User {
   createdAt    DateTime @default(now())
   reset        PasswordReset?
   enrollments  Enrollment[]
-  examAttempts ExamAttempt[]
+  preferences  Json?
+  onboardedAt  DateTime?
+  lessons      ContentItem[]
+  attempts     StudyAttempt[]
+  annotations  Annotation[]
+  savedWords   SavedWord[]
+  decks        Deck[]
+  reviews      CardReview[]
+  reports      ContentReport[]
+  sessions     RefreshSession[]
+  identities   SocialIdentity[]
+  media        StudyMedia[]
+  studyDays    StudyDay[]
+  quizzes      QuizAttempt[]
 }
 
 model PasswordReset {
@@ -33,6 +48,8 @@ model PasswordReset {
 }
 
 model Category {
+  publicId Int @unique @default(autoincrement())
+
   id      String   @id
   name    String
   icon    String
@@ -73,6 +90,13 @@ enum ContentStatus {
 }
 
 model ContentItem {
+  publicId Int @unique @default(autoincrement())
+  description String?
+  difficultyScore Float?
+  estimatedCefr String?
+  levelCode String?
+  detail Json?
+
   id          String        @id
   courseId    String
   course      Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
@@ -82,7 +106,15 @@ model ContentItem {
   order       Int
   minutes     Int
   preview     String
+  ownerId     String?
+  owner       User?         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  isPublic    Boolean       @default(false)
+  practice    Json?
+  attempts    StudyAttempt[]
+  annotations Annotation[]
+  reports     ContentReport[]
   @@index([courseId, order])
+  @@index([ownerId, status])
 }
 
 model Enrollment {
@@ -92,6 +124,160 @@ model Enrollment {
   course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   @@id([userId, courseId])
+}
+
+model StudyAttempt {
+  id        String      @id @default(cuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lessonId  String
+  lesson    ContentItem @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  mode      String
+  state     String
+  response  Json
+  feedback  Json?
+  score     Int?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  @@index([userId, lessonId, updatedAt])
+}
+
+model Annotation {
+  id        String      @id @default(cuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lessonId  String
+  lesson    ContentItem @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  kind      String
+  quote     String
+  note      String
+  createdAt DateTime    @default(now())
+  @@index([userId, lessonId])
+}
+
+model SavedWord {
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  word      String
+  meaning   String
+  createdAt DateTime @default(now())
+  @@id([userId, word])
+}
+
+model ContentReport {
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lessonId  String
+  lesson    ContentItem @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  reason    String
+  createdAt DateTime    @default(now())
+  @@id([userId, lessonId])
+}
+
+model Deck {
+  publicId Int @unique @default(autoincrement())
+  description String?
+  sourceLang String @default("en")
+  targetLang String @default("vi")
+
+  id        String   @id @default(cuid())
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  title     String
+  isPublic  Boolean  @default(false)
+  cards     Card[]
+  createdAt DateTime @default(now())
+  @@index([ownerId])
+}
+
+model Card {
+  publicId Int @unique @default(autoincrement())
+  definition String?
+  phonetic String?
+  exampleSentence String?
+  pos String?
+  imageUrl String?
+  audioUrl String?
+
+  id      String       @id @default(cuid())
+  deckId  String
+  deck    Deck         @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  front   String
+  back    String
+  reviews CardReview[]
+  @@index([deckId])
+}
+
+model CardReview {
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cardId     String
+  card       Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  box        Int
+  nextReview DateTime
+  reviewedAt DateTime @default(now())
+  @@id([userId, cardId])
+}
+
+model StudyDay {
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  day    String
+  @@id([userId, day])
+}
+
+model QuizAttempt {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mode      String
+  questions Json
+  result    Json?
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+  @@index([userId, createdAt])
+}
+
+model StudyMedia {
+  id        String   @id @default(cuid())
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  mimeType  String
+  objectKey String?
+  bytes     Bytes?
+  createdAt DateTime @default(now())
+  @@index([ownerId])
+}
+
+model RefreshSession {
+  digest    String   @id
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  version   Int
+  expiresAt DateTime
+  @@index([userId])
+}
+
+model SocialIdentity {
+  provider String
+  subject  String
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@id([provider, subject])
+}
+
+model SocialFlow {
+  id          String   @id
+  proofHash   String
+  provider    String
+  platform    String
+  verifier    String?
+  ticketHash  String?
+  userId      String?
+  version     Int?
+  failure     String?
+  expiresAt   DateTime
+  @@index([expiresAt])
 }
 
 model ExamAttempt {

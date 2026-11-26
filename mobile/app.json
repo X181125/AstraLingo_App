@@ -1,11 +1,11 @@
 {
   "expo": {
     "name": "AstraLingo", "slug": "astralingo", "scheme": "astralingo",
-    "version": "0.1.0", "orientation": "portrait", "userInterfaceStyle": "light",
+    "version": "0.1.0", "orientation": "portrait", "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": { "supportsTablet": true, "bundleIdentifier": "com.astralingo.app" },
     "android": { "package": "com.astralingo.app", "edgeToEdgeEnabled": true },
     "web": { "bundler": "metro", "output": "single", "name": "AstraLingo" },
-    "plugins": ["expo-router", "expo-secure-store", "expo-font"]
+    "plugins": ["expo-router", "expo-secure-store", "expo-font", ["expo-audio", { "microphonePermission": "AstraLingo cần microphone để ghi âm bài luyện nói." }], ["expo-image-picker", { "photosPermission": "AstraLingo dùng ảnh bạn chọn để tra từ vựng.", "cameraPermission": "AstraLingo dùng camera để tra từ vựng qua ảnh.", "microphonePermission": false }]]
   }
 }

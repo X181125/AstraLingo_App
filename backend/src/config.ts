@@ -12,6 +12,14 @@ const schema = z.object({
   MAIL_FROM: z.string().default('AstraLingo <no-reply@example.com>'),
   SMTP_HOST: z.string().optional(), SMTP_PORT: z.coerce.number().default(587),
   SMTP_USER: z.string().optional(), SMTP_PASS: z.string().optional(),
+  GEMINI_API_KEY: z.string().optional(),
+  GEMINI_MODEL: z.string().optional(),
+  SUPABASE_URL: z.url().or(z.literal('')).optional(),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
+  SUPABASE_MEDIA_BUCKET: z.string().min(1).optional(),
+  SUPABASE_AUTH_KEY: z.string().optional(),
+  OAUTH_CALLBACK_URL: z.url().or(z.literal('')).optional(),
+  OAUTH_PROVIDERS: z.string().optional(),
 });
 
 export function readConfig() {

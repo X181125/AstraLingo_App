@@ -10,13 +10,13 @@ export default function Register() {
   const auth = useAuth();
   const [name, setName] = useState(''), [email, setEmail] = useState(''), [password, setPassword] = useState(''), [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
-  if (auth.user) return <Redirect href="/(tabs)/home" />;
+  if (auth.user) return <Redirect href="/onboarding" />;
   async function submit() {
     if (busy) return;
     if (name.trim().length < 2 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) || password.length < 8) { setError('Nhập tên, email hợp lệ và mật khẩu có ít nhất 8 ký tự.'); return; }
     if (confirm !== password) { setError('Hai mật khẩu chưa khớp. Bạn kiểm tra lại nhé.'); return; }
     setBusy(true); setError('');
-    try { await auth.register(name.trim(), email.trim(), password); router.replace('/(tabs)/home'); }
+    try { await auth.register(name.trim(), email.trim(), password); router.replace('/onboarding'); }
     catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   }
   return <AuthShell title="Bắt đầu hành trình" subtitle="Tạo tài khoản của bạn. Mỗi bước nhỏ hôm nay mở ra một thế giới mới." back={() => router.replace('/login')}>

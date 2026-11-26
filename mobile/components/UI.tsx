@@ -4,19 +4,21 @@ import { Text, TextInput } from "@/components/typography";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { colors as c, heading } from '../src/theme';
+import { colors as c, heading, useAppColors } from '../src/theme';
 import { Artwork } from './Artwork';
 
 export function Brand({ small = false }: { small?: boolean }) {
+  const c = useAppColors();
   return <View style={{ flexDirection: 'row', gap: 9, alignItems: 'center' }}>
     <View style={{ width: small ? 31 : 37, height: small ? 31 : 37, borderRadius: 12, backgroundColor: c.purple, alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '-7deg' }] }}><Ionicons name="sparkles" size={small ? 18 : 22} color="white" /></View>
     <Text style={{ fontFamily: heading, fontSize: small ? 23 : 27, color: c.ink, letterSpacing: -.6 }}>astra<Text style={{ color: c.purple }}>lingo</Text><Text style={{ color: '#E6AE5E' }}>.</Text></Text>
   </View>;
 }
 export function Button({ label, onPress, loading, secondary, disabled, icon }: { label: string; onPress: () => void; loading?: boolean; secondary?: boolean; disabled?: boolean; icon?: keyof typeof Ionicons.glyphMap }) {
+  const theme = useAppColors();
   return <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={loading || disabled} onPress={onPress}
-    style={({ pressed }) => [s.button, secondary && s.secondary, (loading || disabled) && { opacity: .55 }, pressed && { opacity: .85, transform: [{ scale: .99 }] }]}>
-    {loading ? <ActivityIndicator color={secondary ? c.purple : 'white'} /> : <><Text style={[s.buttonLabel, secondary && { color: c.purple }]}>{label}</Text>{icon && <Ionicons name={icon} size={18} color={secondary ? c.purple : 'white'} />}</>}
+    style={({ pressed }) => [s.button, secondary && { ...s.secondary, backgroundColor: theme.lavender, borderColor: theme.border }, (loading || disabled) && { opacity: .55 }, pressed && { opacity: .85, transform: [{ scale: .99 }] }]}>
+    {loading ? <ActivityIndicator color={secondary ? theme.purple : 'white'} /> : <><Text style={[s.buttonLabel, secondary && { color: theme.purple }]}>{label}</Text>{icon && <Ionicons name={icon} size={18} color={secondary ? theme.purple : 'white'} />}</>}
   </Pressable>;
 }
 export function Field({ label, icon, password, error, ...props }: TextInputProps & { label: string; icon: keyof typeof Ionicons.glyphMap; password?: boolean; error?: string }) {

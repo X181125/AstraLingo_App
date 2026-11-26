@@ -1,7 +1,7 @@
 import { before, after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { startPrismaDevServer } from '@prisma/dev';
 import { PrismaClient } from '@prisma/client';
 import request from 'supertest';
@@ -227,6 +227,127 @@ test('SMTP failure gives the same public response and permits retry', async () =
   await send(user.email);
   assert.equal(sends, 2);
   assert.ok(await db.passwordReset.findUnique({ where: { userId: user.id } }));
+});
+
+test('study content checks ownership, hides answers and stores submissions and progress', async () => {
+  const instance = createApp(db, testConfig(), async () => {});
+  const register = (email: string) => request(instance).post('/api/auth/register')
+    .send({ name: 'Study Tester', email, password: 'Testing@12345' }).expect(201).then(result => result.body.data);
+  const owner = await register('study-owner@example.test');
+  const learner = await register('study-learner@example.test');
+  const ownerHeaders = { Authorization: `Bearer ${owner.token}` };
+  const learnerHeaders = { Authorization: `Bearer ${learner.token}` };
+  const data = { courseId: 'english-first-steps', contentType: 'READING', title: 'Short lesson',
+    body: 'We meet at noon.', questions: [{ prompt: 'When?', options: ['At noon', 'At 3'], answer: 0 }] };
+  const created = await request(instance).post('/api/study/lessons').set(ownerHeaders).send(data).expect(201);
+  const path = `/api/study/lessons/${created.body.data.id}`;
+  await request(instance).get(path).set(learnerHeaders).expect(404);
+  await request(instance).put(path).set(learnerHeaders).send(data).expect(404);
+  await request(instance).put(path).set(ownerHeaders).send({ ...data, status: 'PUBLISHED', isPublic: true }).expect(200);
+  const visible = await request(instance).get(path).set(learnerHeaders).expect(200);
+  assert.deepEqual(visible.body.data.questions, [{ prompt: 'When?', options: ['At noon', 'At 3'] }]);
+  const graded = await request(instance).post(path + '/assessment').set(learnerHeaders).send({ answers: [0] }).expect(201);
+  assert.equal(graded.body.data.score, 100);
+  await request(instance).post(path + '/annotations').set(learnerHeaders).send({ kind: 'HIGHLIGHT', quote: 'at noon' }).expect(201);
+  assert.equal((await request(instance).get(path + '/annotations').set(ownerHeaders).expect(200)).body.data.length, 0);
+  await request(instance).post(path + '/report').set(learnerHeaders).send({ reason: 'Test moderation report' }).expect(200);
+  await request(instance).post(path + '/clone').set(learnerHeaders).expect(201);
+  const writing = '/api/study/lessons/english-first-steps-4';
+  const draft = await request(instance).post(writing + '/submission').set(learnerHeaders).send({ text: 'I wake up at eight.', submit: false }).expect(201);
+  const body = { attemptId: draft.body.data.id, text: 'I wake up early and walk to class.', submit: true };
+  await request(instance).post(writing + '/submission').set(ownerHeaders).send(body).expect(409);
+  await request(instance).post(writing + '/submission').set(learnerHeaders).send(body).expect(200);
+  await request(instance).post(writing + '/submission').set(learnerHeaders).send(body).expect(409);
+  const progress = await request(instance).get('/api/account/progress').set(learnerHeaders).expect(200);
+  assert.equal(progress.body.data.attempts, 2);
+  assert.equal(progress.body.data.streak, 1);
+  assert.equal(progress.body.data.skills.find((item: { skill: string }) => item.skill === 'READING').average, 100);
+});
+
+test('quiz deadlines, Leitner review, audio privacy and rotating refresh integrate with persisted accounts', async () => {
+  const codes = new Map<string, string>();
+  const instance = createApp(db, testConfig(), async (email, code) => { codes.set(email, code); });
+  const password = 'Practice@12345';
+  const email = 'review-owner@example.test';
+  const owner = (await request(instance).post('/api/auth/register').send({ name: 'Review Tester', email, password }).expect(201)).body.data;
+  const other = (await request(instance).post('/api/auth/register').send({
+    name: 'Card Reader', email: 'review-reader@example.test', password, supportsRefresh: true,
+  }).expect(201)).body.data;
+  const lifetime = (token: string) => {
+    const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8'));
+    return payload.exp - payload.iat;
+  };
+  assert.equal(lifetime(owner.token), 7 * 86_400);
+  assert.equal(lifetime(other.token), 15 * 60);
+  const ownerHeaders = { Authorization: `Bearer ${owner.token}` };
+  const otherHeaders = { Authorization: `Bearer ${other.token}` };
+  const refresh = (refreshToken: string) => request(instance).post('/api/auth/refresh').send({ refreshToken });
+  const [one, two] = await Promise.all([refresh(owner.refreshToken), refresh(owner.refreshToken)]);
+  assert.deepEqual([one.status, two.status].sort(), [200, 401]);
+  const replacement = (one.status === 200 ? one : two).body.data.refreshToken;
+  await request(instance).put('/api/account/onboarding').set(ownerHeaders).send({ nativeLang: 'vi', level: 'B2',
+    preferences: { goal: 'work', ageGroup: '18-24', dailyMinutes: 15, referral: 'school' } }).expect(200);
+  const updated = await request(instance).patch('/api/account/profile').set(ownerHeaders).send({ name: 'Review Update', appearance: 'dark' }).expect(200);
+  assert.equal(updated.body.data.preferences.dailyMinutes, 15);
+  assert.equal(updated.body.data.preferences.appearance, 'dark');
+
+  const createdQuiz = (await request(instance).post('/api/study/quizzes').set(ownerHeaders).send({ mode: 'QUIZ' }).expect(201)).body.data;
+  assert.equal(createdQuiz.questions.length, 5);
+  assert.equal(createdQuiz.questions[0].answer, undefined);
+  const submit = (quizId: string, answers: number[]) => request(instance).post(`/api/study/quizzes/${quizId}/submit`).set(ownerHeaders).send({ answers });
+  await submit(createdQuiz.id, [-1, -1, -1, -1, -1]).expect(200);
+  const exam = (await request(instance).post('/api/study/quizzes').set(ownerHeaders).send({ mode: 'EXAM' }).expect(201)).body.data;
+  assert.equal(exam.questions.length, 20);
+  await db.quizAttempt.update({ where: { id: exam.id }, data: { expiresAt: new Date(Date.now() - 1000) } });
+  await submit(exam.id, Array(20).fill(-1)).expect(409);
+
+  const deck = (await request(instance).post('/api/learn/decks').set(ownerHeaders).send({ title: 'Vocabulary practice' }).expect(201)).body.data;
+  const deckPath = `/api/learn/decks/${deck.id}`;
+  await request(instance).post(deckPath + '/cards').set(ownerHeaders).send({ cards: [{ front: 'garden', back: 'khu vườn' }] }).expect(201);
+  await request(instance).get(deckPath).set(otherHeaders).expect(404);
+  await request(instance).patch(deckPath).set(ownerHeaders).send({ isPublic: true }).expect(200);
+  const open = await request(instance).get(deckPath).set(otherHeaders).expect(200);
+  const cardPath = `/api/learn/cards/${open.body.data.cards[0].id}/review`;
+  await request(instance).post(cardPath).set(otherHeaders).send({ answer: 'good' }).expect(404);
+  const review = await request(instance).post(cardPath).set(ownerHeaders).send({ answer: 'good' }).expect(200);
+  assert.equal(review.body.data.box, 2);
+  await request(instance).post(cardPath).set(ownerHeaders).send({ answer: 'good' }).expect(409);
+  await request(instance).post(deckPath + '/clone').set(otherHeaders).expect(201);
+
+  const media = (await request(instance).post('/api/study/audio').set(ownerHeaders)
+    .send({ mimeType: 'audio/wav', data: Buffer.from('RIFF0000WAVEfmt ').toString('base64') }).expect(201)).body.data;
+  await request(instance).get(`/api/study/audio/${media.id}`).set(otherHeaders).expect(404);
+  await request(instance).get(`/api/study/audio/${media.id}`).set(ownerHeaders).expect(200);
+  await request(instance).post('/api/study/lessons/english-first-steps-3/submission').set(ownerHeaders)
+    .send({ audioId: media.id, submit: true }).expect(201);
+
+  await request(instance).post('/api/auth/forgot-password').send({ email }).expect(200);
+  await request(instance).post('/api/auth/reset-password').send({ email, code: codes.get(email), password: 'Updated@12345' }).expect(200);
+  await refresh(replacement).expect(401);
+  const newToken = (await request(instance).post('/api/auth/login').send({ email, password: 'Updated@12345' }).expect(200)).body.data.token;
+  await request(instance).delete('/api/account/profile').set('Authorization', `Bearer ${newToken}`)
+    .send({ password: 'Updated@12345', confirmation: 'XÓA' }).expect(200);
+  assert.equal(await db.studyMedia.count({ where: { ownerId: owner.user.id } }), 0);
+  assert.equal(await db.studyDay.count({ where: { userId: owner.user.id } }), 0);
+});
+
+test('OAuth handoff requires the app proof and the browser ticket and can be redeemed once', async () => {
+  const instance = createApp(db, testConfig(), async () => {});
+  const user = await db.user.create({ data: { email: 'oauth-handoff@example.test', name: 'OAuth Test', passwordHash: 'unused' } });
+  const id = randomBytes(32).toString('base64url');
+  const proof = randomBytes(32).toString('base64url');
+  const ticket = randomBytes(32).toString('base64url');
+  const digest = (value: string) => createHash('sha256').update(value).digest('hex');
+  await db.socialFlow.create({ data: { id, provider: 'google', platform: 'web', proofHash: digest(proof),
+    ticketHash: digest(ticket), userId: user.id, version: user.tokenVersion, expiresAt: new Date(Date.now() + 60_000) } });
+  const complete = (appProof: string, browserTicket: string) => request(instance).post('/api/auth/social/complete')
+    .send({ id, proof: appProof, ticket: browserTicket });
+  await complete(proof, proof).expect(404);
+  await complete(ticket, ticket).expect(404);
+  const result = await complete(proof, ticket).expect(200);
+  assert.equal(result.body.data.user.id, user.id);
+  assert.equal(result.body.data.user.passwordHash, undefined);
+  await complete(proof, ticket).expect(404);
 });
 
 test('SAT section saves answers, grades both modules and restricts attempt access', async () => {
