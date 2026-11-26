@@ -1,4 +1,4 @@
-import { Redirect } from "expo-router";
+import { Redirect } from 'expo-router';
 export default function Entry() {
-  return <Redirect href="/flashcards" />;
+  return <Redirect href="/flashcards?action=create" />;
 }

@@ -1,4 +1,4 @@
-import { Redirect } from "expo-router";
-export default function Entry() {
-  return <Redirect href="/study?skill=LISTENING" />;
+import { LessonLibrary } from '@/components/LessonLibrary';
+export default function Screen() {
+  return <LessonLibrary initialSkill="LISTENING" />;
 }

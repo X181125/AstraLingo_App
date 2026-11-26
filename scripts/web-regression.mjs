@@ -15,7 +15,8 @@ const button = (page, name) => page.getByRole('button', { name, exact: true });
 
 async function register(page, completeOnboarding = false) {
   await page.goto(new URL('/register', base).href);
-  await page.getByLabel('Tên của bạn', { exact: true }).fill('Web regression');
+  await page.getByLabel('First Name', { exact: true }).fill('Web');
+  await page.getByLabel('Last Name', { exact: true }).fill('Regression');
   await page.getByLabel('Email', { exact: true }).fill(`web-regression-${randomUUID()}@example.test`);
   await page.getByLabel('Mật khẩu', { exact: true }).fill('Regression@12345');
   await page.getByLabel('Nhập lại mật khẩu', { exact: true }).fill('Regression@12345');
@@ -36,7 +37,7 @@ async function verifyLogout() {
     await register(page);
     await button(page, 'Mở hồ sơ cá nhân').click();
     await page.waitForURL('**/profile');
-    await page.evaluate(key => {
+    await page.evaluate((key) => {
       const remove = Storage.prototype.removeItem;
       Storage.prototype.removeItem = function (entry) {
         if (entry === key) throw new Error('Injected deletion failure');
@@ -45,18 +46,20 @@ async function verifyLogout() {
     }, sessionKey);
     await button(page, 'Đăng xuất').click();
     await page.waitForURL('**/login');
-    assert.ok(!(await page.evaluate(key => sessionStorage.getItem(key), sessionKey)));
+    assert.ok(!(await page.evaluate((key) => sessionStorage.getItem(key), sessionKey)));
     await page.reload();
-    await page.getByText('Chào bạn trở lại!', { exact: true }).waitFor();
+    await page.getByText('Welcome back', { exact: true }).waitFor();
     console.log('PASS: logout with a failed storage deletion cannot restore the token');
-  } finally { await context.close(); }
+  } finally {
+    await context.close();
+  }
 }
 
 async function verifyPagination() {
   const context = await browser.newContext();
   try {
     const page = await context.newPage();
-    await page.route('**/api/courses?*', async route => {
+    await page.route('**/api/courses?*', async (route) => {
       const url = new URL(route.request().url());
       url.searchParams.set('limit', '2');
       await route.fulfill({ response: await route.fetch({ url: url.href }) });
@@ -68,7 +71,7 @@ async function verifyPagination() {
     await page.getByText('Đọc những điều thú vị', { exact: true }).waitFor();
     await page.getByText('Lắng nghe cuộc sống', { exact: true }).waitFor({ state: 'hidden' });
     const [response] = await Promise.all([
-      page.waitForResponse(r => {
+      page.waitForResponse((r) => {
         const url = new URL(r.url());
         return url.pathname === '/api/courses' && !url.searchParams.has('category');
       }),
@@ -77,7 +80,9 @@ async function verifyPagination() {
     assert.equal(new URL(response.url()).searchParams.get('page'), '1');
     await page.getByText('Tiếng Anh từ bước đầu', { exact: true }).waitFor();
     console.log('PASS: returning to a prior filter starts at page one');
-  } finally { await context.close(); }
+  } finally {
+    await context.close();
+  }
 }
 
 async function verifyLearning() {
@@ -87,7 +92,10 @@ async function verifyLearning() {
     await register(page, true);
     await page.goto(new URL('/study', base).href);
     await button(page, 'Mini Quiz').click();
-    await page.getByRole('button', { name: /Grammar/i }).first().click();
+    await page
+      .getByRole('button', { name: /Grammar/i })
+      .first()
+      .click();
     await button(page, 'Submit exam').click();
     await button(page, 'Submit now').click();
     await page.getByText('0% correct', { exact: true }).waitFor();
@@ -105,18 +113,26 @@ async function verifyLearning() {
     await button(page, 'Da Nang').click();
     await button(page, 'Plays badminton').click();
     await button(page, 'Nộp bộ câu hỏi').click();
-    await page.getByRole('heading', {name:'2/2 câu đúng · 100/100'}).waitFor();
+    await page.getByRole('heading', { name: '2/2 câu đúng · 100/100' }).waitFor();
 
     await page.goto(new URL('/study/content/listening/english-first-steps-2/transcript', base).href);
-    await button(page, 'Xem transcript').click();
+    await button(page, 'Ẩn transcript').waitFor();
     await button(page, 'Phát âm thanh').click();
-    await page.waitForFunction(() => [...document.querySelectorAll('audio')].some(audio => audio.currentTime > 0.05), null, {timeout:5000}).catch(async () => {
-      // Expo Audio also supports detached media elements; the player state reports playback there.
-      await button(page, 'Tạm dừng').waitFor();
-    });
+    await page
+      .waitForFunction(
+        () => [...document.querySelectorAll('audio')].some((audio) => audio.currentTime > 0.05),
+        null,
+        { timeout: 5000 },
+      )
+      .catch(async () => {
+        // Expo Audio also supports detached media elements; the player state reports playback there.
+        await button(page, 'Tạm dừng').waitFor();
+      });
 
     await page.goto(new URL('/practice/english-first-steps-4', base).href);
-    await page.getByLabel('Bài viết của bạn', { exact: true }).fill('I walk to class in the morning. I read at home after lunch.');
+    await page
+      .getByLabel('Bài viết của bạn', { exact: true })
+      .fill('I walk to class in the morning. I read at home after lunch.');
     await button(page, 'Lưu bản nháp').click();
     await button(page, 'Tiếp tục bản nháp').click();
     await button(page, 'Nộp bài').click();
@@ -134,6 +150,8 @@ async function verifyLearning() {
     await page.getByText('garden · Khu vườn', { exact: true }).waitFor();
 
     await page.goto(new URL('/flashcards', base).href);
+    await button(page, 'My Lists').click();
+    await button(page, 'Create Word List').click();
     await page.getByLabel('Tên bộ thẻ').fill('Reading words');
     await button(page, 'Tạo bộ thẻ').click();
     await page.getByLabel('Mặt trước').fill('garden');
@@ -154,41 +172,84 @@ async function verifyLearning() {
     await page.goto(new URL('/profile', base).href);
     await page.getByText('Learning Preview', { exact: true }).waitFor();
     console.log('PASS: onboarding, Quiz, Reading, Writing, Dictionary, Flashcards and persisted progress');
-  } finally { await context.close(); }
+  } finally {
+    await context.close();
+  }
+}
+
+async function verifyNavigation() {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  try {
+    const page = await ctx.newPage();
+    await register(page);
+    for (const name of ['Categories', 'Popular Courses', 'Top Mentor'])
+      await page.getByRole('heading', { name, exact: true }).waitFor();
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    await button(page, 'Choose an exam').click();
+    await page.getByRole('heading', { name: 'All Tests', exact: true }).waitFor();
+    await page.goto(new URL('/study', base).href);
+    await button(page, 'Reading Practice').click();
+    await page.getByRole('button', { name: 'Hello, world!', exact: true }).click();
+    await button(page, 'Saved words').click();
+    await page.getByLabel('Word or phrase').fill('morning');
+    await page.getByLabel('Meaning', { exact: true }).fill('buổi sáng');
+    await button(page, 'Save word').click();
+    await page.getByText('morning · buổi sáng', { exact: true }).waitFor();
+    await page.reload();
+    await page.getByText('morning · buổi sáng', { exact: true }).waitFor();
+    await page.goto(new URL('/dictionary', base).href);
+    await button(page, 'Browse all words').click();
+    await page.getByRole('heading', { name: 'English Explorer' }).waitFor();
+    await page.goto(new URL('/profile', base).href);
+    await button(page, 'FAQ').click();
+    await button(page, 'Where are my scores?').click();
+    await page.getByText(/Open Exam history/).waitFor();
+    console.log('PASS: mobile navigation from Home, Reading, Dictionary and Profile');
+  } finally {
+    await ctx.close();
+  }
 }
 
 async function verifyPhoneFlows() {
-  const context = await browser.newContext({viewport:{width:390,height:844},permissions:['microphone']});
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    permissions: ['microphone'],
+  });
   try {
-    const page=await context.newPage();
+    const page = await context.newPage();
     await register(page);
-    await page.goto(new URL('/study/exam',base).href);
-    await page.getByRole('button',{name:/SAT.*4/i}).first().click();
-    await button(page,'Start exam').click();
-    const first=page.getByRole('radio',{name:'Module 1 · Question 1, A',exact:true});
+    await page.goto(new URL('/study/exam', base).href);
+    await page
+      .getByRole('button', { name: /SAT.*4/i })
+      .first()
+      .click();
+    await button(page, 'Start exam').click();
+    const first = page.getByRole('radio', { name: 'Module 1 · Question 1, A', exact: true });
     await first.click();
-    await page.waitForFunction(()=>document.querySelector('[role="radio"][aria-checked="true"]'));
-    await page.getByRole('tab',{name:'Module 2'}).click();
-    await page.getByRole('radio',{name:'Module 2 · Question 1, B',exact:true}).click();
-    await page.getByText('2 of 66 answered',{exact:true}).waitFor();
-    await button(page,'Submit exam').click();
-    await button(page,'Submit now').click();
+    await page.waitForFunction(() => document.querySelector('[role="radio"][aria-checked="true"]'));
+    await page.getByRole('tab', { name: 'Module 2' }).click();
+    await page.getByRole('radio', { name: 'Module 2 · Question 1, B', exact: true }).click();
+    await page.getByText('2 of 66 answered', { exact: true }).waitFor();
+    await button(page, 'Submit exam').click();
+    await button(page, 'Submit now').click();
     await page.getByText(/^[0-9]+ \/ 66$/).waitFor();
-    await button(page,'View exam history').click();
-    await page.getByRole('button',{name:/SAT Practice Test 4/i}).waitFor();
+    await button(page, 'View exam history').click();
+    await page.getByRole('button', { name: /SAT Practice Test 4/i }).waitFor();
 
-    await page.goto(new URL('/practice/english-first-steps-3',base).href);
-    await button(page,'Bắt đầu ghi âm').click();
+    await page.goto(new URL('/practice/english-first-steps-3', base).href);
+    await button(page, 'Bắt đầu ghi âm').click();
     await page.getByText(/Đang ghi 0:0[1-9]/).waitFor();
-    await button(page,'Dừng ghi âm').click();
-    await button(page,'Nghe bản ghi mới').waitFor();
-    await button(page,'Nộp bài').click();
-    await page.getByText('Đã nộp bài. Bạn có thể xem lại trong lịch sử.',{exact:true}).first().waitFor();
+    await button(page, 'Dừng ghi âm').click();
+    await button(page, 'Nghe bản ghi mới').waitFor();
+    await button(page, 'Nộp bài').click();
+    await page.getByText('Đã nộp bài. Bạn có thể xem lại trong lịch sử.', { exact: true }).first().waitFor();
     await page.reload();
-    await button(page,'Xem bài làm').click();
-    await button(page,'Phát âm thanh').waitFor();
+    await button(page, 'Xem bài làm').click();
+    await button(page, 'Phát âm thanh').waitFor();
     console.log('PASS: phone viewport, both SAT modules, raw score, history and persisted microphone upload');
-  } finally {await context.close();}
+  } finally {
+    await context.close();
+  }
 }
 
 try {
@@ -196,6 +257,7 @@ try {
   await verifyPagination();
   await verifyLearning();
   await verifyPhoneFlows();
+  await verifyNavigation();
 } finally {
   await browser.close();
 }
