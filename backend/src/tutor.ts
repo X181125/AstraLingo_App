@@ -1,9 +1,10 @@
+import { readAudio } from './study.js';
 import { Router, type RequestHandler } from 'express';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import type { Config } from './config.js';
 import { ok, ApiError } from './http.js';
-import { generate } from './learning-services.js';
+import { generate, analyzeWriting, writingAnalyses } from './learning-services.js';
 
 const key = z.coerce.number().int().positive().max(2147483647);
 const term = z.string().trim().min(1).max(1500);
@@ -208,6 +209,114 @@ export function tutorRoutes(db: PrismaClient, config: Config, auth: RequestHandl
           }),
         ),
       );
+    });
+  }
+  router.post(
+    ['generate', 'regenerate', 'segment', 'timing-generate'].map(
+      (action) => '/listening-audios/:id/transcript/' + action,
+    ),
+    auth,
+    limit,
+    async (req, res) => {
+      const row = await db.contentItem.findFirst({
+        where: { publicId: key.parse(req.params.id), ownerId: res.locals.user.id, contentType: 'LISTENING' },
+      });
+      if (!row) throw new ApiError(404, 'Chỉ tác giả có thể cập nhật transcript.');
+      const practice = object(row.practice),
+        prior = Array.isArray(practice.transcript) ? practice.transcript : [];
+      let transcript: { second: number; text: string }[];
+      if (req.path.endsWith('/segment') && Array.isArray(req.body?.segments)) {
+        transcript = z
+          .array(z.object({ startSec: z.number().nonnegative(), text: z.string().trim().min(1).max(500) }))
+          .min(1)
+          .max(80)
+          .parse(req.body.segments)
+          .map((s) => ({ second: s.startSec, text: s.text }));
+      } else if (req.path.endsWith('/segment') && prior.length) {
+        return ok(res, {
+          audioId: row.publicId,
+          segments: prior.map((v) => ({ startSec: object(v).second, text: object(v).text })),
+        });
+      } else {
+        if (typeof practice.audioId !== 'string')
+          throw new ApiError(409, 'Hãy tải tệp âm thanh của bài lên trước khi tạo mốc thời gian.');
+        const audio = await readAudio(db, config, practice.audioId);
+        const output = await generate(
+          config,
+          'transcription',
+          'Return a time-aligned transcript using up to 80 segments.',
+          audio,
+        );
+        transcript = z
+          .array(z.object({ second: z.number().nonnegative(), text: z.string().min(1).max(500) }))
+          .min(1)
+          .max(80)
+          .parse(output.segments.map((s) => ({ second: s.startSec, text: s.text })));
+      }
+      if (transcript.some((s, i) => i && s.second <= transcript[i - 1].second))
+        throw new ApiError(400, 'Các mốc transcript phải tăng dần.');
+      const body = transcript.map((s) => s.text).join('\n');
+      if (body.length > 10000) throw new ApiError(400, 'Transcript vượt quá 10.000 ký tự.');
+      const result = await db.contentItem.updateMany({
+        where: {
+          id: row.id,
+          ownerId: res.locals.user.id,
+          practice: { equals: row.practice as Prisma.InputJsonValue },
+        },
+        data: {
+          preview: body.slice(0, 240),
+          practice: { ...practice, body, transcript } as Prisma.InputJsonObject,
+        },
+      });
+      if (!result.count) throw new ApiError(409, 'Bài nghe đã thay đổi.');
+      ok(res, {
+        id: row.publicId,
+        audioId: row.publicId,
+        transcript: body,
+        transcriptJson: { segments: transcript.map((s) => ({ startSec: s.second, text: s.text })) },
+      });
+    },
+  );
+  for (const aspect of writingAnalyses) {
+    router.get('/writing-submissions/:id/ai/' + aspect, auth, limit, async (req, res) => {
+      const row = await db.studyAttempt.findFirst({
+        where: { publicId: key.parse(req.params.id), mode: 'WRITING', userId: res.locals.user.id },
+        include: { lesson: true },
+      });
+      if (!row) throw new ApiError(404, 'Không tìm thấy bài nộp.');
+      if (row.state !== 'COMPLETED') throw new ApiError(409, 'Hãy chấm bài trước khi xem phân tích.');
+      const input = object(row.response),
+        previous = object(row.feedback);
+      let analysis = object(previous.analyses ?? null)[aspect];
+      if (!analysis) {
+        analysis = await analyzeWriting(
+          config,
+          aspect,
+          String(input.assignment ?? row.lesson.preview),
+          String(input.text ?? ''),
+        );
+        await db.$transaction(async (tx) => {
+          await tx.$queryRaw`SELECT id FROM "StudyAttempt" WHERE id=${row.id} FOR UPDATE`;
+          const current = object((await tx.studyAttempt.findUniqueOrThrow({ where: { id: row.id } })).feedback);
+          await tx.studyAttempt.update({
+            where: { id: row.id },
+            data: {
+              feedback: {
+                ...current,
+                analyses: { ...object(current.analyses ?? null), [aspect]: analysis },
+              } as Prisma.InputJsonObject,
+            },
+          });
+        });
+      }
+      ok(res, {
+        ...object(analysis),
+        submissionId: row.publicId,
+        submissionStatus: row.state,
+        originalText: input.text,
+        criteria: previous.criteria,
+        generatedAt: row.completedAt,
+      });
     });
   }
   return router;

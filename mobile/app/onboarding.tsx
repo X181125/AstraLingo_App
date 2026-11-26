@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Button } from '../components/UI';
 import { ActionNotice, Choices, Copy, LearningScreen, Panel, Section, useAction } from '../components/Learning';
 import { api } from '../src/api';
@@ -17,10 +17,11 @@ const referralName = { friends: 'Bạn bè', school: 'Trường học', internet
 export default function Onboarding() {
   const auth = useAuth();
   const action = useAction();
-  const [step, setStep] = useState(0);
-  const [nativeLang, setNativeLang] = useState('vi');
+  const { page }=useLocalSearchParams<{page?:string}>();
+  const [step, setStep] = useState(page && /^[1-7]$/.test(page) ? Number(page)-1 : 0);
+  const [nativeLang, setNativeLang] = useState(auth.user?.nativeLang ?? 'vi');
   const [goal, setGoal] = useState<typeof goals[number]>('study');
-  const [level, setLevel] = useState('A1');
+  const [level, setLevel] = useState(auth.user?.level ?? 'A1');
   const [ageGroup, setAgeGroup] = useState<typeof ages[number]>('18-24');
   const [dailyMinutes, setMinutes] = useState<typeof minutes[number]>(10);
   const [referral, setReferral] = useState<typeof referrals[number]>('other');

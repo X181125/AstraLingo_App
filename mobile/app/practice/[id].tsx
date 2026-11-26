@@ -130,6 +130,12 @@ function PracticeContent({ lesson, path }: { lesson: Practice; path: string }) {
       {selected && selected.state !== 'DRAFT' && <Panel>
         {!!selected.response.text && <Copy selectable>{selected.response.text}</Copy>}
         {!!selected.response.audioId && <Listen key={selected.id} audioId={selected.response.audioId} />}
+        {selected.response.audioId && ai.data?.gemini && <Button label="Tạo transcript bản ghi" secondary loading={action.busy} onPress={() => void action.run(async () => {
+          const result = await api<{transcript:string;segments:{startSec:number;endSec:number;text:string}[]}>(`/speaking-attempts/${selected.publicId}/transcript-segments/generate`,{token:auth.token,method:'POST',timeoutMs:55000});
+          setSelected({...selected,response:{...selected.response,...result}});attempts.reload();
+          if(!result.segments.length) action.setSuccess('Không nhận diện được lời nói trong bản ghi.');
+        })} />}
+        {selected.response.segments?.map((line,i)=><Copy key={i}>{duration(line.startSec)} · {line.text}</Copy>)}
         {selected.state === 'SUBMITTED' && (ai.data?.gemini
           ? <Button label="Chấm và nhận phản hồi AI" loading={action.busy} onPress={() => void action.run(async () => {
             const item = await api<Attempt>(`/study/attempts/${selected.id}/feedback`, { token: auth.token, method: 'POST', timeoutMs: 55_000 });

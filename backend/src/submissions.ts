@@ -56,6 +56,7 @@ export function submissionRoutes(db: PrismaClient, config: Config, auth: Request
     const mode = skill === 'writing' ? ContentType.WRITING : ContentType.SPEAKING;
     const prompts = '/' + skill + '-prompts/:id',
       submissions = '/' + skill + '-submissions/:id';
+    const attemptPath = '/speaking-attempts/:id';
     const visible = (userId: string): Prisma.ContentItemWhereInput => ({
       contentType: mode,
       course: { language: 'en' },
@@ -120,21 +121,25 @@ export function submissionRoutes(db: PrismaClient, config: Config, auth: Request
           : { items: rows.map(view), total, page, limit, totalPages: Math.ceil(total / limit) },
       );
     });
-    router.post(prompts + '/submissions', auth, async (req, res) => {
-      const item = await prompt(req.params.id, res.locals.user.id);
-      if (item.status !== 'PUBLISHED') throw new ApiError(409, 'Đề bài chưa xuất bản.');
-      const response = await changes(req.body, res.locals.user.id);
-      ok(
-        res,
-        view(
-          await db.studyAttempt.create({
-            data: { userId: res.locals.user.id, lessonId: item.id, mode, state: 'DRAFT', response },
-            include: full,
-          }),
-        ),
-        201,
-      );
-    });
+    router.post(
+      skill === 'speaking' ? [prompts + '/submissions', prompts + '/attempts'] : prompts + '/submissions',
+      auth,
+      async (req, res) => {
+        const item = await prompt(req.params.id, res.locals.user.id);
+        if (item.status !== 'PUBLISHED') throw new ApiError(409, 'Đề bài chưa xuất bản.');
+        const response = await changes(req.body, res.locals.user.id);
+        ok(
+          res,
+          view(
+            await db.studyAttempt.create({
+              data: { userId: res.locals.user.id, lessonId: item.id, mode, state: 'DRAFT', response },
+              include: full,
+            }),
+          ),
+          201,
+        );
+      },
+    );
     router.get(
       [submissions, submissions + '/result', submissions + '/status', submissions + '/ai/status'],
       auth,
@@ -174,6 +179,63 @@ export function submissionRoutes(db: PrismaClient, config: Config, auth: Request
     };
     router.post(submissions + '/submit', auth, submit);
     router.patch(submissions + '/submit', auth, submit);
+    if (skill === 'speaking') {
+      router.post([attemptPath + '/submit', attemptPath + '/finish'], auth, submit);
+      router.patch([attemptPath + '/submit', attemptPath + '/finish'], auth, submit);
+      router.patch(attemptPath + '/progress', auth, edit);
+      router.get(prompts + '/attempts/mine', auth, async (req, res) => {
+        const item = await prompt(req.params.id, res.locals.user.id);
+        const rows = await db.studyAttempt.findMany({
+          where: { mode, userId: res.locals.user.id, lessonId: item.id },
+          orderBy: { updatedAt: 'desc' },
+          take: 100,
+          include: full,
+        });
+        ok(res, { promptId: item.publicId, attempts: rows.map(view) });
+      });
+      router.get(
+        [
+          attemptPath,
+          attemptPath + '/resume',
+          attemptPath + '/resume-check',
+          attemptPath + '/result',
+          attemptPath + '/review',
+          attemptPath + '/score-breakdown',
+          attemptPath + '/feedback',
+        ],
+        auth,
+        async (req, res) => {
+          const row = await owned(req.params.id, res.locals.user.id);
+          ok(res, {
+            ...view(row),
+            attempt: view(row),
+            canResume: row.state === 'DRAFT',
+            overallScore: row.score,
+            feedback: row.feedback,
+          });
+        },
+      );
+      router.get(
+        [
+          attemptPath + '/transcript',
+          attemptPath + '/transcript-segments',
+          attemptPath + '/feedback-segments',
+          attemptPath + '/timeline',
+        ],
+        auth,
+        async (req, res) => {
+          const row = await owned(req.params.id, res.locals.user.id);
+          const segments = json(row.response).segments ?? [];
+          const feedbackSegments = json(row.feedback).segments ?? [];
+          ok(res, {
+            attemptId: row.publicId,
+            transcript: json(row.response).transcript ?? null,
+            segments: req.path.endsWith('feedback-segments') ? feedbackSegments : segments,
+            feedbackSegments,
+          });
+        },
+      );
+    }
     router.delete(submissions, auth, async (req, res) => {
       const row = await owned(req.params.id, res.locals.user.id);
       const changed = await db.studyAttempt.deleteMany({ where: { id: row.id, state: 'DRAFT' } });

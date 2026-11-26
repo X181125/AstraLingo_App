@@ -1,3 +1,4 @@
+import routeContract from './mobile-routes.json' with {type:'json'};
 import { before, after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -432,4 +433,63 @@ test('mobile resource contracts use the same users, word index, flashcards, lear
   const copy=(await api.post(path+'/reopen-as-draft').set(auth).send({}).expect(201)).body.data;
   assert.equal(copy.status,'DRAFT');assert.equal(copy.originalText,'My final draft.');
   await api.post(path+'/ai/evaluate').set(auth).send({}).expect(503);
+});
+
+test('all 309 mobile method/path pairs resolve to an Express handler', () => {
+  // Match the actual mounted router, including nested mounts and array paths.
+  type Layer = {matchers?: ((url:string)=>false|{path:string})[]; route?:{methods:Record<string,boolean>}; handle?:{stack?:Layer[]}};
+  function matches(stack:Layer[],method:string,path:string):boolean {
+    return stack.some(layer=>{
+      const hit=layer.matchers?.map(match=>match(path)).find(value=>value!==false);
+      if(!hit)return false;
+      if(layer.route)return Boolean(layer.route.methods[method]);
+      return !!layer.handle?.stack && matches(layer.handle.stack,method,path.slice(hit.path.length)||'/');
+    });
+  }
+  const missing=routeContract.filter(line=>{
+    const [verb,path]=line.split(' ');
+    return !matches(app.router.stack as unknown as Layer[],verb.toLowerCase(),path.replaceAll(':id','12345'));
+  });
+  assert.deepEqual(missing,[]);
+});
+
+test('media, authoring and vocabulary resources enforce ownership and preserve graded snapshots',async()=>{
+  const api=request(createApp(db,testConfig(),async()=>{}));
+  const session=async(email:string)=>({Authorization:'Bearer '+(await api.post('/api/auth/register').send({fullName:'Practice Student',email,password:'English@123456'}).expect(201)).body.data.token});
+  const me=await session('workshop-owner@example.test'),other=await session('workshop-guest@example.test');
+  const categories=(await api.get('/api/content-categories')).body.data;
+  const create=async(contentType:string,detail:object)=>(await api.post('/api/content-items').set(me).send({title:'Practice workshop',contentType,detail,status:'PUBLISHED',isPublic:true,levelId:1,categoryId:categories[0].id}).expect(201)).body.data;
+  const r=await create('READING',{plainText:'A leaf grows.'});
+  const w=(await api.post('/api/reading-passages/'+r.id+'/saved-words').set(other).send({surfaceForm:'Leaf',meaningNative:'lá'}).expect(201)).body.data;
+  assert.equal(w.surfaceForm,'leaf');
+  await api.patch('/api/reading-saved-words/'+w.id).set(me).send({note:'test'}).expect(404);
+  const wav=Buffer.alloc(128);wav.write('RIFF',0);wav.write('WAVE',8);
+  const file=(await api.post('/api/content-items/upload-audio').set(me).attach('file',wav,{filename:'speech.wav',contentType:'audio/wav'}).expect(201)).body.data;
+  const l=await create('LISTENING',{transcript:'I can hear birds.',audioUrl:file.audioUrl});
+  await api.get(file.audioUrl).expect(200);
+  const notes='/api/listening-audios/'+l.id+'/annotations';
+  const ann=(await api.post(notes).set(other).send({type:'HIGHLIGHT',rangeStart:0,rangeEnd:5}).expect(201)).body.data;
+  assert.equal(ann.quote,'I can');
+  await api.post('/api/listening-annotations/'+ann.id+'/pin').set(other).expect(200);
+  await api.delete('/api/listening-annotations/'+ann.id).set(me).expect(404);
+  const sp=await create('SPEAKING',{promptText:'Introduce yourself.'}), bp='/api/speaking-prompts/'+sp.id;
+  const assess=(await api.post(bp+'/assessments').set(me).send({title:'Discussion',isActive:true}).expect(201)).body.data;
+  const q=(await api.post('/api/speaking-assessments/'+assess.id+'/questions').set(me).send({questionText:'Where do you live?',sampleAnswer:'In a city.'}).expect(201)).body.data;
+  await api.get('/api/speaking-questions/'+q.id).set(other).expect(200);
+  await api.get('/api/speaking-assessments/'+assess.id+'/answer-key').set(other).expect(404);
+  await api.delete('/api/speaking-questions/'+q.id).set(other).expect(404);
+  const a=(await api.post(bp+'/attempts').set(me).send({}).expect(201)).body.data;
+  const clips='/api/speaking-attempts/'+a.id+'/recordings';
+  const upload=(await api.post(clips+'/upload-url').set(me).send({fileName:'hello.wav',mimeType:'audio/wav'}).expect(201)).body.data;
+  await api.put(upload.uploadUrl).set('Content-Type','audio/wav').send(wav).expect(200);
+  await api.put(upload.uploadUrl).set('Content-Type','audio/wav').send(wav).expect(409);
+  const clip='/api/speaking-recordings/'+upload.id;
+  await api.post(clip+'/upload-complete').set(me).send({}).expect(200);
+  await api.get(clip+'/signed-url').set(other).expect(404);
+  const playback=(await api.get(clip+'/signed-url').set(me).expect(200)).body.data.signedUrl;
+  await api.get(playback.split('?')[0]).expect(403);
+  const actual=await api.get(playback).buffer().expect(200);
+  assert.deepEqual(actual.body,wav);
+  await api.post('/api/speaking-attempts/'+a.id+'/submit').set(me).send({}).expect(200);
+  await api.delete(clip).set(me).expect(409);
 });

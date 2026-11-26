@@ -1,3 +1,4 @@
+import { bankQuestions } from './question-bank.js';
 import { Router, type RequestHandler } from 'express';
 import { Prisma, type ContentItem, type LessonAssessment, type PrismaClient } from '@prisma/client';
 import { z } from 'zod';
@@ -9,11 +10,18 @@ import type { Config } from './config.js';
 const identifier = z.coerce.number().int().positive().max(2147483647);
 const title = z.string().trim().min(1).max(120);
 const options = z
-  .array(z.object({ optionText: z.string().trim().min(1).max(500), isCorrect: z.boolean() }))
+  .array(
+    z.object({
+      id: z.number().int().positive().optional(),
+      optionText: z.string().trim().min(1).max(500),
+      isCorrect: z.boolean(),
+    }),
+  )
   .min(2)
   .max(8);
 const authored = z
   .object({
+    id: z.number().int().positive().optional(),
     questionText: z.string().trim().min(1).max(1000),
     questionType: z.enum(['MCQ', 'TF', 'FILL', 'SHORT', 'ORDERING']),
     explanation: z.string().max(1000).nullish(),
@@ -41,12 +49,12 @@ function convert(q: z.infer<typeof question>): Q {
 }
 function questionsView(questions: Q[], key: boolean) {
   return questions.map((q, i) => ({
-    id: i + 1,
+    id: q.id ?? i + 1,
     questionText: q.questionText,
     questionType: q.questionType,
     ...(key && { explanation: q.explanation, answerText: q.answerText }),
     options: (q.options ?? []).map((o, j) => ({
-      id: j + 1,
+      id: o.id ?? j + 1,
       optionText: o.optionText,
       ...(key && { isCorrect: o.isCorrect }),
     })),
@@ -119,36 +127,50 @@ export function assessmentRoutes(db: PrismaClient, config: Config, auth: Request
       ok(
         res,
         row
-          ? { ...summary(row, item), questions: questionsView(z.array(authored).parse(row.questions), false) }
+          ? {
+              ...summary(row, item),
+              questions: questionsView(
+                z.array(authored).parse(kind === 'listening' ? bankQuestions(row) : row.questions),
+                false,
+              ),
+            }
           : null,
       );
     });
     const add: RequestHandler = async (req, res) => {
       const item = await lesson(req.params.id, res.locals.user.id, true);
-      const input = req.path.endsWith('/generate')
-        ? {
-            title: item.title,
-            questions: (
-              await generate(config, 'questions', String(object(item.practice).body ?? item.preview))
-            ).questions.map(convert),
-          }
-        : setFields.parse(req.body);
+      const input =
+        req.path.endsWith('/generate') || req.path.endsWith('/regenerate')
+          ? {
+              title: item.title,
+              questions: (
+                await generate(config, 'questions', String(object(item.practice).body ?? item.preview))
+              ).questions.map(convert),
+            }
+          : kind === 'listening' && !req.body?.questions
+            ? { title: title.optional().parse(req.body?.title), questions: [] }
+            : setFields.parse(req.body);
       const row = await db.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT id FROM "ContentItem" WHERE id=${item.id} FOR UPDATE`;
         const first = !(await tx.lessonAssessment.count({ where: { lessonId: item.id } }));
+        if (req.body?.isActive === true)
+          await tx.lessonAssessment.updateMany({
+            where: { lessonId: item.id, isActive: true },
+            data: { isActive: false },
+          });
         return tx.lessonAssessment.create({
           data: {
             lessonId: item.id,
             title: input.title ?? item.title,
             questions: input.questions,
-            isActive: first,
+            isActive: typeof req.body?.isActive === 'boolean' ? req.body.isActive : first,
           },
         });
       });
       ok(res, { ...summary(row, item), questions: questionsView(input.questions, true) }, 201);
     };
     router.post(collection, auth, add);
-    router.post(collection + '/generate', auth, aiLimit, add);
+    router.post([collection + '/generate', collection + '/regenerate'], auth, aiLimit, add);
     router.get(entity, auth, async (req, res) => {
       const row = await findSet(req.params.id, res.locals.user.id);
       ok(res, {
@@ -225,8 +247,14 @@ export function assessmentRoutes(db: PrismaClient, config: Config, auth: Request
         where: { lessonId: item.id, ...(assessmentId ? { id: assessmentId } : { isActive: true }) },
       });
       if (!set) throw new ApiError(404, 'Chưa có bộ câu hỏi đang hoạt động.');
+      const batch = z
+        .array(authored)
+        .min(1)
+        .max(40)
+        .safeParse(kind === 'listening' ? bankQuestions(set) : set.questions);
+      if (!batch.success) throw new ApiError(409, 'Bộ đề chưa có đủ câu hỏi và đáp án.');
       const run = await db.assessmentRun.create({
-        data: { userId, assessmentId: set.id, snapshot: set.questions as Prisma.InputJsonValue },
+        data: { userId, assessmentId: set.id, snapshot: batch.data },
         include,
       });
       ok(res, attemptView(run), 201);
@@ -249,6 +277,122 @@ export function assessmentRoutes(db: PrismaClient, config: Config, auth: Request
         ok(res, { attempt: attemptView(row), result: row.result });
       },
     );
+
+    router.get(
+      [entity + '/answer-key', entity + '/review-data', entity + '/questions'],
+      auth,
+      async (req, res) => {
+        const ownerOnly = !req.path.endsWith('/questions'),
+          userId = res.locals.user.id;
+        const row = await findSet(req.params.id, userId, ownerOnly);
+        const questions = questionsView(z.array(authored).parse(row.questions), row.lesson.ownerId === userId);
+        ok(res, { assessmentId: row.id, ...summary(row, row.lesson), questions });
+      },
+    );
+    router.post(entity + '/duplicate', auth, async (req, res) => {
+      const row = await findSet(req.params.id, res.locals.user.id, true);
+      const copy = await db.lessonAssessment.create({
+        data: {
+          lessonId: row.lessonId,
+          title: (row.title + ' · Bản sao').slice(0, 120),
+          questions: row.questions as Prisma.InputJsonValue,
+          isActive: false,
+        },
+      });
+      ok(res, summary(copy, row.lesson), 201);
+    });
+    router.get(prefix + '/assessment-active', auth, async (req, res) => {
+      const row = await lesson(req.params.id, res.locals.user.id);
+      await initialize(row);
+      const active = await db.lessonAssessment.findFirst({ where: { lessonId: row.id, isActive: true } });
+      ok(
+        res,
+        active
+          ? { ...summary(active, row), questions: questionsView(z.array(authored).parse(active.questions), false) }
+          : null,
+      );
+    });
+    router.post(
+      [attempts + '/abandon', attempts + '/resume', attempts + '/retry', attempts + '/replay'],
+      auth,
+      async (req, res) => {
+        const run = await ownRun(req.params.id, res.locals.user.id);
+        if (req.path.endsWith('/abandon')) {
+          if (run.finishedAt) throw new ApiError(409, 'Bài đã nộp.');
+          await db.assessmentRun.updateMany({
+            where: { id: run.id, finishedAt: null },
+            data: { abandoned: true },
+          });
+          return ok(res, { attemptId: run.id, status: 'ABANDONED' });
+        }
+        if (req.path.endsWith('/resume')) {
+          if (run.abandoned || run.finishedAt) throw new ApiError(409, 'Lượt làm đã kết thúc.');
+          return ok(res, attemptView(run));
+        }
+        const fresh = await db.assessmentRun.create({
+          data: {
+            assessmentId: run.assessmentId,
+            userId: run.userId,
+            snapshot: run.snapshot as Prisma.InputJsonValue,
+          },
+          include,
+        });
+        ok(res, attemptView(fresh), 201);
+      },
+    );
+    router.get(
+      [attempts + '/feedback', attempts + '/score-breakdown', attempts + '/resume-check'],
+      auth,
+      async (req, res) => {
+        const run = await ownRun(req.params.id, res.locals.user.id);
+        if (req.path.endsWith('/resume-check'))
+          return ok(res, { attemptId: run.id, canResume: !run.abandoned && !run.finishedAt });
+        if (!run.result) throw new ApiError(409, 'Hãy nộp bài trước khi xem kết quả.');
+        ok(res, { attemptId: run.id, ...object(run.result) });
+      },
+    );
+    router.post(
+      [
+        attempts + '/score/generate',
+        attempts + '/review/generate',
+        attempts + '/feedback/generate',
+        attempts + '/weakness-analysis',
+        attempts + '/recommend-next',
+      ],
+      auth,
+      aiLimit,
+      async (req, res) => {
+        const run = await ownRun(req.params.id, res.locals.user.id);
+        if (!run.finishedAt || !run.result) throw new ApiError(409, 'Hãy nộp bài trước.');
+        if (req.path.endsWith('/score/generate') || req.path.endsWith('/review/generate'))
+          return ok(res, { attemptId: run.id, ...object(run.result) });
+        if (req.path.endsWith('/recommend-next')) {
+          const list = await db.contentItem.findMany({
+            where: {
+              contentType: skill,
+              status: 'PUBLISHED',
+              course: { language: 'en' },
+              id: { not: run.assessment.lessonId },
+              OR: [{ ownerId: null }, { isPublic: true }],
+            },
+            take: 3,
+            select: { publicId: true, title: true, preview: true },
+          });
+          return ok(res, { attemptId: run.id, recommendations: list });
+        }
+        const analysis = await generate(
+          config,
+          'tutor',
+          JSON.stringify({
+            activity: 'Explain missed questions and give a study plan.',
+            questions: run.snapshot,
+            answers: run.answers,
+            grade: run.result,
+          }),
+        );
+        ok(res, { attemptId: run.id, ...analysis });
+      },
+    );
     const answers = z
       .array(
         z.object({
@@ -260,22 +404,32 @@ export function assessmentRoutes(db: PrismaClient, config: Config, auth: Request
       .max(40);
     const respond: RequestHandler = async (req, res) => {
       const row = await ownRun(req.params.id, res.locals.user.id);
+      if (row.abandoned) throw new ApiError(409, 'Lượt làm đã dừng.');
       if (row.finishedAt) return ok(res, { attempt: attemptView(row), result: row.result });
-      const questions = z.array(authored).parse(row.snapshot),
-        choices = answers.parse(req.body?.answers ?? row.answers ?? []);
+      const questions = z.array(authored).parse(row.snapshot);
+      const raw = req.body?.answers ?? req.body?.answersJson ?? row.answers ?? [];
+      const submitted = Array.isArray(raw)
+        ? raw.map((v) => ({ ...v, selectedOptionId: v?.selectedOptionId ?? v?.optionId ?? undefined }))
+        : Object.entries(z.record(z.string(), z.union([z.number(), z.string(), z.null()])).parse(raw))
+            .filter(([, v]) => v != null)
+            .map(([questionId, selectedOptionId]) => ({ questionId, selectedOptionId }));
+      const choices = answers.parse(submitted);
       const ids = new Set(choices.map((a) => a.questionId));
       if (
         ids.size !== choices.length ||
-        choices.some(
-          (a) =>
-            a.questionId > questions.length ||
-            (a.selectedOptionId && a.selectedOptionId > (questions[a.questionId - 1].options?.length ?? 0)),
-        )
+        choices.some((a) => {
+          const q = questions.find((q, i) => (q.id ?? i + 1) === a.questionId);
+          return (
+            !q ||
+            (a.selectedOptionId !== undefined &&
+              !q.options?.some((o, j) => (o.id ?? j + 1) === a.selectedOptionId))
+          );
+        })
       )
         throw new ApiError(400, 'Đáp án không khớp bộ câu hỏi.');
       if (req.path.endsWith('/answers') || req.path.endsWith('/progress')) {
         const change = await db.assessmentRun.updateMany({
-          where: { id: row.id, finishedAt: null },
+          where: { id: row.id, finishedAt: null, abandoned: false },
           data: { answers: choices },
         });
         if (!change.count) throw new ApiError(409, 'Bài đã nộp.');
@@ -283,11 +437,11 @@ export function assessmentRoutes(db: PrismaClient, config: Config, auth: Request
       }
       const normalize = (text: string) => text.trim().toLowerCase().replace(/\s+/g, ' ');
       const graded = questions.map((q, i) => {
-        const choice = choices.find((a) => a.questionId === i + 1),
-          correctOptionIds = (q.options ?? []).flatMap((o, j) => (o.isCorrect ? [j + 1] : []));
+        const choice = choices.find((a) => a.questionId === (q.id ?? i + 1)),
+          correctOptionIds = (q.options ?? []).flatMap((o, j) => (o.isCorrect ? [o.id ?? j + 1] : []));
         const expected = q.answerText ?? q.options?.find((o) => o.isCorrect)?.optionText ?? '';
         return {
-          questionId: i + 1,
+          questionId: q.id ?? i + 1,
           questionType: q.questionType,
           selectedOptionId: choice?.selectedOptionId ?? null,
           correctOptionIds,
@@ -311,7 +465,7 @@ export function assessmentRoutes(db: PrismaClient, config: Config, auth: Request
       await db.$transaction(async (tx) => {
         const finishedAt = new Date();
         const change = await tx.assessmentRun.updateMany({
-          where: { id: row.id, finishedAt: null },
+          where: { id: row.id, finishedAt: null, abandoned: false },
           data: { finishedAt, answers: choices, result },
         });
         if (!change.count) return;
@@ -320,7 +474,7 @@ export function assessmentRoutes(db: PrismaClient, config: Config, auth: Request
           options: q.options?.map((o) => o.optionText) ?? [q.answerText ?? ''],
           answer: q.options?.findIndex((o) => o.isCorrect) ?? 0,
           explanation: q.explanation ?? '',
-          selected: (graded[i].selectedOptionId ?? 0) - 1,
+          selected: q.options?.findIndex((o, j) => (o.id ?? j + 1) === graded[i].selectedOptionId) ?? -1,
           correct: graded[i].isCorrect,
         }));
         await tx.studyAttempt.create({
@@ -339,7 +493,7 @@ export function assessmentRoutes(db: PrismaClient, config: Config, auth: Request
         await recordStudy(tx, row.userId);
       });
       const saved = await ownRun(row.id, row.userId);
-      ok(res, { attempt: attemptView(saved), result: saved.result });
+      ok(res, { ...attemptView(saved), attempt: attemptView(saved), result: saved.result });
     };
     router.patch(
       [attempts + '/submit', attempts + '/answers', attempts + '/progress', attempts + '/finish'],

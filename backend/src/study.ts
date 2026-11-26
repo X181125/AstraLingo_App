@@ -116,13 +116,32 @@ export async function readAudio(db: StudyDb, config: Config, audioId: string) {
   return { mimeType: item.mimeType, data: Buffer.from(await data.arrayBuffer()).toString('base64') };
 }
 
-function validAudio(bytes: Buffer, type: string) {
+export function validAudio(bytes: Buffer, type: string) {
   if (bytes.length > maxAudioBytes || bytes.length < 12) return false;
   if (type.includes('m4a') || type === 'audio/mp4') return bytes.subarray(4, 8).toString('ascii') === 'ftyp';
   if (type === 'audio/wav') return bytes.subarray(0, 4).toString('ascii') === 'RIFF' && bytes.subarray(8, 12).toString('ascii') === 'WAVE';
   if (type === 'audio/ogg') return bytes.subarray(0, 4).toString('ascii') === 'OggS';
   if (type === 'audio/webm') return bytes.subarray(0, 4).toString('hex') === '1a45dfa3';
   return bytes.subarray(0, 3).toString('ascii') === 'ID3' || (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0);
+}
+
+export async function storeAudio(db:PrismaClient,config:Config,userId:string,mimeType:string,bytes:Buffer<ArrayBuffer>) {
+  if (!audioMime.safeParse(mimeType).success || !validAudio(bytes,mimeType)) throw new ApiError(400,'Tệp âm thanh không hợp lệ hoặc lớn hơn 4 MB.');
+    const bucket = privateBucket(config);
+    const mediaId = crypto.randomUUID();
+    const objectKey = bucket ? `${userId}/${mediaId}` : null;
+    if (bucket && objectKey) {
+      const { error } = await bucket.upload(objectKey, bytes, { contentType: mimeType, upsert: false });
+      if (error) throw new ApiError(502, 'Không lưu được âm thanh lên Supabase Storage.');
+    }
+    try {
+      const item = await db.studyMedia.create({ data: { id: mediaId, ownerId: userId, mimeType, objectKey, bytes: objectKey ? null : bytes },
+        select: mediaSelect });
+      return metadata(item);
+    } catch (error) {
+      if (bucket && objectKey) await bucket.remove([objectKey]).catch(() => undefined);
+      throw error;
+    }
 }
 
 export function studyRouter(db: PrismaClient, config: Config, auth: RequestHandler) {
@@ -407,21 +426,7 @@ export function studyRouter(db: PrismaClient, config: Config, auth: RequestHandl
     const { data, mimeType } = audioBody.parse(req.body);
     const bytes = Buffer.from(data, 'base64');
     if (!validAudio(bytes, mimeType)) throw new ApiError(400, 'Tệp âm thanh không hợp lệ hoặc lớn hơn 4 MB.');
-    const bucket = privateBucket(config);
-    const mediaId = crypto.randomUUID();
-    const objectKey = bucket ? `${userId}/${mediaId}` : null;
-    if (bucket && objectKey) {
-      const { error } = await bucket.upload(objectKey, bytes, { contentType: mimeType, upsert: false });
-      if (error) throw new ApiError(502, 'Không lưu được âm thanh lên Supabase Storage.');
-    }
-    try {
-      const item = await db.studyMedia.create({ data: { id: mediaId, ownerId: userId, mimeType, objectKey, bytes: objectKey ? null : bytes },
-        select: mediaSelect });
-      ok(res, metadata(item), 201);
-    } catch (error) {
-      if (bucket && objectKey) await bucket.remove([objectKey]).catch(() => undefined);
-      throw error;
-    }
+    ok(res, await storeAudio(db,config,userId,mimeType,bytes),201);
   });
 
   router.get('/audio/:id', async (req, res) => {

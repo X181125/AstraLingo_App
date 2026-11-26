@@ -1,3 +1,7 @@
+import { questionBank } from './question-bank.js';
+import { speechReviewRoutes } from './speech-review.js';
+import { recordingRoutes } from './recordings.js';
+import { passageWordRoutes } from './passage-words.js';
 import { passageRoutes } from './passage.js';
 import { tutorRoutes } from './tutor.js';
 import { assessmentRoutes } from './assessments.js';
@@ -73,6 +77,10 @@ export function createApp(db: PrismaClient, config: Config, sendReset: SendReset
 
   app.use('/api', tutorRoutes(db, config, authenticated, mediaLimit));
   app.use('/api/media/listening', express.static('resources/listening', {index:false, dotfiles:'deny'}));
+  app.use('/api', recordingRoutes(db, config, authenticated, mediaLimit));
+  app.use('/api', passageWordRoutes(db, authenticated));
+  app.use('/api', questionBank(db, config, authenticated, mediaLimit));
+  app.use('/api', speechReviewRoutes(db, config, authenticated, mediaLimit));
   app.use('/api', passageRoutes(db, authenticated));
   app.use('/api', assessmentRoutes(db, config, authenticated, mediaLimit));
   app.use('/api', submissionRoutes(db, config, authenticated, mediaLimit));

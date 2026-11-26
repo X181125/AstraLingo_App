@@ -175,7 +175,7 @@ async function verifyPhoneFlows() {
     await button(page,'Submit now').click();
     await page.getByText(/^[0-9]+ \/ 66$/).waitFor();
     await button(page,'View exam history').click();
-    await page.getByText(/SAT Practice Test 4/i).first().waitFor();
+    await page.getByRole('button',{name:/SAT Practice Test 4/i}).waitFor();
 
     await page.goto(new URL('/practice/english-first-steps-3',base).href);
     await button(page,'Bắt đầu ghi âm').click();

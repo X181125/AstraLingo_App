@@ -14,10 +14,7 @@ const detailFields = z.object({
   plainText: brief.optional(),
   transcript: brief.optional(),
   promptText: brief.optional(),
-  audioUrl: z
-    .url({ protocol: /^https$/ })
-    .max(2000)
-    .optional(),
+  audioUrl: z.union([z.url({protocol:/^https$/}),z.string().regex(/^\/api\/media\/content\/[a-zA-Z0-9-]{1,128}$/)]).optional(),
   wordCount: z.number().int().nonnegative().optional(),
   sampleAnswer: brief.optional(),
   accent: brief.optional(),
@@ -218,7 +215,7 @@ export function catalogRoutes(db: PrismaClient, auth: RequestHandler) {
   router.get('/content-items/:id', auth, async (req, res) =>
     ok(res, view(await get(req.params.id, res.locals.user.id), req.query.includeDetail !== 'false')),
   );
-  async function fields(input: Partial<z.infer<typeof editable>>, type: ContentType, previous?: Item) {
+  async function fields(input: Partial<z.infer<typeof editable>>, type: ContentType, ownerId: string, previous?: Item) {
     const detail = { ...object(previous?.detail ?? null), ...input.detail };
     const practice = object(previous?.practice ?? null);
     const source =
@@ -235,6 +232,8 @@ export function catalogRoutes(db: PrismaClient, auth: RequestHandler) {
       if (!course) throw new ApiError(400, 'Danh mục chưa có khóa học tiếng Anh.');
       courseId = course.id;
     }
+    const uploaded = typeof detail.audioUrl === 'string' && detail.audioUrl.startsWith('/api/media/content/') ? detail.audioUrl.split('/').at(-1) : undefined;
+    if (uploaded && !await db.studyMedia.count({where:{id:uploaded,ownerId}})) throw new ApiError(400,'Bản ghi không thuộc tài khoản của bạn.');
     const status = input.status ?? previous?.status ?? 'DRAFT';
     return {
       courseId: courseId!,
@@ -250,6 +249,7 @@ export function catalogRoutes(db: PrismaClient, auth: RequestHandler) {
       detail: detail as Prisma.InputJsonObject,
       practice: {
         ...practice,
+        ...(uploaded && {audioId:uploaded}),
         body,
         questions: practice.questions ?? [],
         transcript: practice.transcript ?? [],
@@ -258,7 +258,7 @@ export function catalogRoutes(db: PrismaClient, auth: RequestHandler) {
   }
   router.post('/content-items', auth, async (req, res) => {
     const input = create.parse(req.body);
-    const data = await fields(input, input.contentType);
+    const data = await fields(input, input.contentType,res.locals.user.id);
     const row = await db.contentItem.create({
       data: { ...data, id: crypto.randomUUID(), ownerId: res.locals.user.id, order: 100, minutes: 10 },
       include,
@@ -267,7 +267,7 @@ export function catalogRoutes(db: PrismaClient, auth: RequestHandler) {
   });
   router.put('/content-items/:id', auth, async (req, res) => {
     const row = await get(req.params.id, res.locals.user.id, true);
-    const data = await fields(editable.partial().parse(req.body), row.contentType, row);
+    const data = await fields(editable.partial().parse(req.body), row.contentType,res.locals.user.id,row);
     ok(
       res,
       view(
@@ -309,9 +309,13 @@ export function catalogRoutes(db: PrismaClient, auth: RequestHandler) {
     const data = await fields(
       { title: (row.title + ' · Bản sao').slice(0, 120), status: 'DRAFT' },
       row.contentType,
+      row.ownerId ?? res.locals.user.id,
       row,
     );
-    if (row.ownerId !== res.locals.user.id) delete (data.practice as Record<string, unknown>).audioId;
+    if (row.ownerId !== res.locals.user.id && (data.practice as Record<string, unknown>).audioId) {
+      delete (data.practice as Record<string, unknown>).audioId;
+      delete (data.detail as Record<string, unknown>).audioUrl;
+    }
     const copy = await db.contentItem.create({
       data: {
         ...data,

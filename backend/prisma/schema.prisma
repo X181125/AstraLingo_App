@@ -27,6 +27,7 @@ model User {
   attempts     StudyAttempt[]
   annotations  Annotation[]
   savedWords   SavedWord[]
+  passageWords PassageWord[]
   decks        Deck[]
   reviews      CardReview[]
   reports      ContentReport[]
@@ -115,6 +116,7 @@ model ContentItem {
   annotations Annotation[]
   reports     ContentReport[]
   assessments LessonAssessment[]
+  passageWords PassageWord[]
   @@index([courseId, order])
   @@index([ownerId, status])
 }
@@ -129,6 +131,8 @@ model Enrollment {
 }
 
 model StudyAttempt {
+  clips SpeechClip[]
+  segments SpeechSegment[]
   publicId Int @unique @default(autoincrement())
   submittedAt DateTime?
   completedAt DateTime?
@@ -250,6 +254,7 @@ model QuizAttempt {
 }
 
 model StudyMedia {
+  clips SpeechClip[]
   id        String   @id @default(cuid())
   ownerId   String
   owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
@@ -309,6 +314,7 @@ model ExamAttempt {
 }
 
 model LessonAssessment {
+  settings Json?
   id Int @id @default(autoincrement())
   lessonId String
   lesson ContentItem @relation(fields: [lessonId], references: [id], onDelete: Cascade)
@@ -321,6 +327,7 @@ model LessonAssessment {
 }
 
 model AssessmentRun {
+  abandoned Boolean @default(false)
   id Int @id @default(autoincrement())
   assessmentId Int
   assessment LessonAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
@@ -332,4 +339,43 @@ model AssessmentRun {
   startedAt DateTime @default(now())
   finishedAt DateTime?
   @@index([userId, assessmentId])
+}
+
+model PassageWord {
+  id Int @id @default(autoincrement())
+  userId String
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  lessonId String
+  lesson ContentItem @relation(fields:[lessonId],references:[id],onDelete:Cascade)
+  word String
+  meaning String?
+  note String?
+  wordId String?
+  createdAt DateTime @default(now())
+  @@unique([userId,lessonId,word])
+}
+
+model SpeechClip {
+  id Int @id @default(autoincrement())
+  attemptId String
+  attempt StudyAttempt @relation(fields:[attemptId],references:[id],onDelete:Cascade)
+  mediaId String?
+  media StudyMedia? @relation(fields:[mediaId],references:[id],onDelete:Cascade)
+  mimeType String
+  source String
+  durationSec Float?
+  waveform Json?
+  createdAt DateTime @default(now())
+  @@index([attemptId])
+  @@unique([attemptId,mediaId])
+}
+
+model SpeechSegment {
+  id Int @id @default(autoincrement())
+  attemptId String
+  attempt StudyAttempt @relation(fields:[attemptId],references:[id],onDelete:Cascade)
+  kind String
+  sequence Int
+  data Json
+  @@index([attemptId,kind])
 }

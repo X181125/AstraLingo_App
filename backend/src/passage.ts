@@ -173,6 +173,55 @@ export function passageRoutes(db: PrismaClient, auth: RequestHandler) {
         });
       },
     );
+    router.get(
+      [
+        base + '/can-submit-check',
+        base + '/transcript-visibility',
+        base + '/replay-policy',
+        base + '/my-learning-state',
+        base + '/my-annotations-summary',
+        base + '/practice-config',
+      ],
+      auth,
+      async (req, res) => {
+        const userId = res.locals.user.id,
+          item = await getLesson(req.params.id, userId),
+          data = object(item.practice);
+        const [marks, completed, draft] = await db.$transaction([
+          db.annotation.groupBy({
+            by: ['kind'],
+            orderBy: { kind: 'asc' },
+            where: { userId, lessonId: item.id, archived: false },
+            _count: true,
+          }),
+          db.studyAttempt.count({
+            where: { userId, lessonId: item.id, state: { in: ['COMPLETED', 'SUBMITTED'] } },
+          }),
+          db.studyAttempt.findFirst({
+            where: { userId, lessonId: item.id, state: 'DRAFT' },
+            orderBy: { updatedAt: 'desc' },
+          }),
+        ]);
+        ok(res, {
+          audioId: item.publicId,
+          promptId: item.publicId,
+          contentItemId: item.publicId,
+          canSubmit: item.status === 'PUBLISHED',
+          canReplay: true,
+          maxReplays: null,
+          transcriptVisible: typeof data.body === 'string',
+          transcriptAvailable: typeof data.body === 'string',
+          completedAttempts: completed,
+          currentAttempt: draft ? { id: draft.publicId, status: draft.state } : null,
+          notes: marks.find((m) => m.kind === 'NOTE')?._count ?? 0,
+          bookmarks: marks.find((m) => m.kind === 'BOOKMARK')?._count ?? 0,
+          highlights: marks.find((m) => m.kind === 'HIGHLIGHT')?._count ?? 0,
+          allowTranscriptInput: true,
+          speakingTimeSec: 90,
+          ...object(item.detail),
+        });
+      },
+    );
     if (skill === 'speaking') continue;
     router.get(
       [
@@ -235,7 +284,7 @@ export function passageRoutes(db: PrismaClient, auth: RequestHandler) {
       const row = await getMark(req.params.id, res.locals.user.id);
       ok(res, asNote(row, row.lesson));
     });
-    router.patch([entity, entity + '/pin', entity + '/unpin', entity + '/archive'], auth, async (req, res) => {
+    const edit: RequestHandler = async (req, res) => {
       const row = await getMark(req.params.id, res.locals.user.id);
       const data = req.path.endsWith('/pin')
         ? { pinned: true }
@@ -251,7 +300,9 @@ export function passageRoutes(db: PrismaClient, auth: RequestHandler) {
           row.lesson,
         ),
       );
-    });
+    };
+    router.patch([entity, entity + '/pin', entity + '/unpin', entity + '/archive'], auth, edit);
+    router.post([entity + '/pin', entity + '/unpin', entity + '/archive'], auth, edit);
     router.delete(entity, auth, async (req, res) => {
       const row = await getMark(req.params.id, res.locals.user.id);
       await db.annotation.delete({ where: { id: row.id, userId: row.userId } });
