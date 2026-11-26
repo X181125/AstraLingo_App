@@ -1,3 +1,4 @@
+import { API_URL } from '../src/api';
 import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
@@ -67,9 +68,10 @@ export function Recorder({ onRecorded, allowFile = false }: { onRecorded: (recor
   </View>;
 }
 
-export function Listen({ body, transcript, audioId, highlights = [] }: { body?: string; transcript?: Transcript[]; audioId?: string; highlights?: string[] }) {
+export function Listen({ body, transcript, audioId, audioUrl, highlights = [] }: { body?: string; transcript?: Transcript[]; audioId?: string; audioUrl?: string; highlights?: string[] }) {
   const { token } = useAuth();
-  const player = useAudioPlayer(null);
+  const source = audioUrl?.startsWith('/api/') ? API_URL.replace(/\/api\/?$/, '') + audioUrl : audioUrl;
+  const player = useAudioPlayer(source ?? null);
   const status = useAudioPlayerStatus(player);
   const action = useAction();
   const [shown, setShown] = useState(false);
@@ -81,8 +83,8 @@ export function Listen({ body, transcript, audioId, highlights = [] }: { body?: 
     return () => { alive.current = false; cached.current?.cleanup(); cached.current = null; void Speech.stop(); };
   }, []);
   async function play(start?: number) {
-    if (audioId) {
-      if (cached.current?.id !== audioId || (cached.current.expiresAt ?? Infinity) <= Date.now()) {
+    if (audioId || source) {
+      if (audioId && (cached.current?.id !== audioId || (cached.current.expiresAt ?? Infinity) <= Date.now())) {
         const media = await getPlayback(token, audioId);
         if (!alive.current) { media.cleanup(); return; }
         cached.current?.cleanup();
@@ -104,8 +106,8 @@ export function Listen({ body, transcript, audioId, highlights = [] }: { body?: 
   }
   return <View style={{ gap: 10 }}>
     <ActionNotice action={action} />
-    <Button label={status.playing ? 'Tạm dừng' : audioId ? 'Phát âm thanh' : 'Nghe giọng đọc mẫu'} icon="volume-high-outline" loading={action.busy} onPress={() => void action.run(() => play())} />
-    {!audioId && <Button label="Dừng đọc" secondary onPress={() => { void Speech.stop(); }} />}
+    <Button label={status.playing ? 'Tạm dừng' : audioId || source ? 'Phát âm thanh' : 'Nghe giọng đọc mẫu'} icon="volume-high-outline" loading={action.busy} onPress={() => void action.run(() => play())} />
+    {!audioId && !source && <Button label="Dừng đọc" secondary onPress={() => { void Speech.stop(); }} />}
     {body && <>
       <Choice label={mode === 'shadow' ? 'Luyện nhại: tốc độ chậm' : 'Bật luyện nhại'} selected={mode === 'shadow'} onPress={() => setMode(m => m === 'shadow' ? 'normal' : 'shadow')} />
       <Button label={shown ? 'Ẩn transcript' : 'Xem transcript'} secondary onPress={() => setShown(current => !current)} />

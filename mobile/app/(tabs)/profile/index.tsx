@@ -3,15 +3,15 @@ import { ActivityIndicator, View } from "react-native";
 import { Text } from "@/components/typography";
 import { useFocusEffect, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '../../src/auth';
-import { api, ApiError } from '../../src/api';
-import type { Enrollment } from '../../src/types';
-import { heading } from '../../src/theme';
-import { Button, Notice } from '../../components/UI';
-import { StudyProgress } from '../../components/StudyProgress';
-import { Copy, LearningScreen, Panel, Section, useLearningColors } from '../../components/Learning';
-import { DiscoveryRow, type IconName } from '../../components/DiscoveryUI';
-import { languageName } from '../../src/learning';
+import { useAuth } from '../../../src/auth';
+import { api, ApiError } from '../../../src/api';
+import type { Enrollment } from '../../../src/types';
+import { heading } from '../../../src/theme';
+import { Button, Notice } from '../../../components/UI';
+import { StudyProgress } from '../../../components/StudyProgress';
+import { Copy, LearningScreen, Panel, Section, useLearningColors } from '../../../components/Learning';
+import { DiscoveryRow, type IconName } from '../../../components/DiscoveryUI';
+import { languageName } from '../../../src/learning';
 
 export default function Profile() {
   const c = useLearningColors();
@@ -25,10 +25,10 @@ export default function Profile() {
   }, [auth.token, refresh]));
   const initials = auth.user?.name.trim().split(/\s+/).slice(-2).map(part => part.charAt(0).toUpperCase()).join('');
   return <LearningScreen title="Góc của bạn">
-    <View style={{ padding: 18, borderRadius: 22, backgroundColor: '#432C75', gap: 14 }}>
+    <View style={{ padding: 18, borderRadius: 22, backgroundColor: '#164796', gap: 14 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 13 }}>
         <View style={{ width: 52, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F7DCA6' }}>
-          <Text style={{ fontFamily: heading, fontSize: 22, color: '#39265D' }}>{initials}</Text>
+          <Text style={{ fontFamily: heading, fontSize: 22, color: '#1C3871' }}>{initials}</Text>
         </View>
         <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
           <Text style={{ fontFamily: heading, fontSize: 25, color: '#FFF9F0' }}>{auth.user?.name}</Text>

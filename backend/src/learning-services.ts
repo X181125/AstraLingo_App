@@ -18,6 +18,8 @@ const feedback = z.object({
   segments: z.array(z.object({ second: z.number().nonnegative(), comment: z.string() })).max(20).default([]),
 });
 const tasks = {
+  lexicon: { prompt: 'Explain this English word. Give IPA when known, its Vietnamese translation, a short English definition and one original English example. Return JSON with word, phonetic, translation, definition, example.', schema: z.object({word:z.string(),phonetic:z.string().nullable(),translation:z.string(),definition:z.string(),example:z.string()}) },
+  tutor: { prompt: 'Provide the specified English learning activity. Explanations should use Vietnamese and quote English examples. Return JSON {"text":"..."}.', schema: z.object({text:z.string().min(1)}) },
   explain: { prompt: 'Explain the English word or sentence in Vietnamese, with English examples and context. Return JSON {"text":"..."}.', schema: z.object({ text: z.string() }) },
   'image-vocabulary': { prompt: 'Identify vocabulary from the attached image. Return JSON {"words":[{"front":"English word","back":"Vietnamese definition and example"}]}. Only include visible items.', schema: z.object({ words: z.array(flashcard).max(20) }) },
   outline: { prompt: 'Help the learner prepare a writing response. Include brainstorm, outline, thesis, topic sentences, vocabulary and checklist, in Vietnamese with English examples. Return JSON {"text":"..."}.', schema: z.object({ text: z.string() }) },

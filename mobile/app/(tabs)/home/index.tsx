@@ -4,22 +4,23 @@ import { Text } from "@/components/typography";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
-import { useAuth } from '../../src/auth';
-import { api } from '../../src/api';
-import type { Category, Course } from '../../src/types';
-import { colors, heading, useAppColors } from '../../src/theme';
-import { Brand, Button, Notice } from '../../components/UI';
-import { Artwork } from '../../components/Artwork';
-import { CourseCard } from '../../components/CourseCard';
-import { IconTile, SearchBox, skillVisuals, type IconName } from '../../components/DiscoveryUI';
-import { HomeMentors } from '../../components/HomeMentors';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useAuth } from '../../../src/auth';
+import { api } from '../../../src/api';
+import type { Category, Course } from '../../../src/types';
+import { colors, heading, useAppColors } from '../../../src/theme';
+import { Brand, Button, Notice } from '../../../components/UI';
+import { Artwork } from '../../../components/Artwork';
+import { CourseCard } from '../../../components/CourseCard';
+import { IconTile, SearchBox, skillVisuals, type IconName } from '../../../components/DiscoveryUI';
+import { HomeMentors } from '../../../components/HomeMentors';
 
 const categoryVisuals: Record<string, (typeof skillVisuals)[keyof typeof skillVisuals]> = {
   reading: skillVisuals.READING, listening: skillVisuals.LISTENING, speaking: skillVisuals.SPEAKING, writing: skillVisuals.WRITING,
 };
 
 export default function Home() {
+  const { focus } = useLocalSearchParams<{focus?:string}>();
   const c = useAppColors();
   const st = React.useMemo(() => makeStyles(c), [c]);
   const { user } = useAuth();
@@ -96,7 +97,7 @@ export default function Home() {
         </View>
       </View>
       <View style={st.searchRow}>
-        <SearchBox label="Tìm kiếm nội dung và khóa học" placeholder="Tìm khóa học tiếng Anh…" value={query} onChange={setQuery}
+        <SearchBox key={focus} autoFocus={focus === 'search'} label="Tìm kiếm nội dung và khóa học" placeholder="Tìm khóa học tiếng Anh…" value={query} onChange={setQuery}
           onSubmit={() => setDebounced(query.trim())} clear={clearSearch} />
         <Pressable accessibilityRole="button" accessibilityLabel="Bộ lọc khóa học" accessibilityState={{ selected: Boolean(level) }}
           onPress={() => setFilters(true)} style={[st.filterButton, Boolean(level) && { backgroundColor: c.lavender }]}>
@@ -115,7 +116,9 @@ export default function Home() {
         </View>
         <View pointerEvents="none" style={[st.heroArt, wide && st.heroArtWide, compact && st.heroArtCompact]}><Artwork size={wide ? 236 : compact ? 106 : 157} dark /></View>
       </LinearGradient>}
-      {!!categories.length && <View style={st.section}>
+      {!!categories.length && <View style={st.section} onLayout={event => {
+        if (focus === 'categories') scroll.current?.scrollTo({y:event.nativeEvent.layout.y,animated:true});
+      }}>
         <View style={st.sectionHead}>
           <Text accessibilityRole="header" style={st.sectionTitle}>Khám phá theo kỹ năng</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="Danh mục Tất cả" accessibilityState={{ selected: !category }}

@@ -55,14 +55,18 @@ function visible(userId: string): Prisma.ContentItemWhereInput {
   };
 }
 
+function lessonKey(lessonId: string) {
+  return /^\d{1,9}$/.test(lessonId) ? { publicId: Number(lessonId) } : { id: lessonId };
+}
+
 async function findLesson(db: StudyDb, lessonId: string, userId: string) {
-  const lesson = await db.contentItem.findFirst({ where: { id: lessonId, ...visible(userId) } });
+  const lesson = await db.contentItem.findFirst({ where: { ...lessonKey(lessonId), ...visible(userId) } });
   if (!lesson) throw new ApiError(404, 'Không tìm thấy bài luyện tập.');
   return lesson;
 }
 
 async function findOwnedLesson(db: StudyDb, lessonId: string, userId: string) {
-  const lesson = await db.contentItem.findFirst({ where: { id: lessonId, ownerId: userId } });
+  const lesson = await db.contentItem.findFirst({ where: { ...lessonKey(lessonId), ownerId: userId } });
   if (!lesson) throw new ApiError(404, 'Không tìm thấy bài của bạn.');
   return lesson;
 }
@@ -101,7 +105,7 @@ async function ownAudio(db: StudyDb, audioId: string, userId: string) {
   return item;
 }
 
-async function readAudio(db: StudyDb, config: Config, audioId: string) {
+export async function readAudio(db: StudyDb, config: Config, audioId: string) {
   const item = await db.studyMedia.findUnique({ where: { id: audioId } });
   if (!item) throw new ApiError(404, 'Không tìm thấy tệp âm thanh.');
   if (!item.objectKey && item.bytes) return { mimeType: item.mimeType, data: Buffer.from(item.bytes).toString('base64') };
@@ -156,7 +160,8 @@ export function studyRouter(db: PrismaClient, config: Config, auth: RequestHandl
     const lesson = await findLesson(db, id.parse(req.params.id), userId);
     const { body, questions, audioId, transcript } = readPractice(lesson.practice);
     const { practice: _practice, ...info } = lesson;
-    ok(res, { ...info, body, audioId, transcript, questions: publicQuestions(questions) });
+    const audioUrl = lesson.detail && typeof lesson.detail === 'object' && !Array.isArray(lesson.detail) ? lesson.detail.audioUrl : undefined;
+    ok(res, { ...info, body, audioId, audioUrl, transcript, questions: publicQuestions(questions) });
   });
 
   router.get('/lessons/:id/edit', async (req, res) => {
@@ -241,7 +246,7 @@ export function studyRouter(db: PrismaClient, config: Config, auth: RequestHandl
   router.get('/lessons/:id/annotations', async (req, res) => {
     const userId = res.locals.user.id as string;
     const lesson = await findLesson(db, id.parse(req.params.id), userId);
-    ok(res, await db.annotation.findMany({ where: { userId, lessonId: lesson.id }, orderBy: { createdAt: 'desc' }, take: 100 }));
+    ok(res, await db.annotation.findMany({ where: { userId, lessonId: lesson.id, archived:false }, orderBy: [{pinned:'desc'},{createdAt:'desc'}], take: 100 }));
   });
 
   router.post('/lessons/:id/annotations', async (req, res) => {
@@ -321,7 +326,7 @@ export function studyRouter(db: PrismaClient, config: Config, auth: RequestHandl
       ...(input.submit ? { assignment: `${lesson.title}\n${readPractice(lesson.practice).body}` } : {}),
     };
     const attempt = await db.$transaction(async tx => {
-      const data = { response, state: input.submit ? 'SUBMITTED' : 'DRAFT' };
+      const data = { response, state: input.submit ? 'SUBMITTED' : 'DRAFT', submittedAt: input.submit ? new Date() : undefined };
       const item = input.attemptId
         ? await (async () => {
           const changed = await tx.studyAttempt.updateMany({ where: { id: input.attemptId, ...scope }, data });
@@ -347,7 +352,7 @@ export function studyRouter(db: PrismaClient, config: Config, auth: RequestHandl
     const media = response.audioId ? await readAudio(db, config, response.audioId) : undefined;
     const result = await generate(config, attempt.mode === 'SPEAKING' ? 'speaking-feedback' : 'writing-feedback', prompt, media);
     const changed = await db.studyAttempt.updateMany({ where: { id: attemptId, userId, state: 'SUBMITTED' },
-      data: { feedback: result, score: result.score, state: 'COMPLETED' } });
+      data: { feedback: result, score: result.score, state: 'COMPLETED', completedAt: new Date() } });
     if (!changed.count) throw new ApiError(409, 'Bài đã được chấm. Tải lại lịch sử để xem kết quả.');
     ok(res, await db.studyAttempt.findUniqueOrThrow({ where: { id: attemptId } }));
   });

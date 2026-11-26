@@ -1,3 +1,7 @@
+import { passageRoutes } from './passage.js';
+import { tutorRoutes } from './tutor.js';
+import { assessmentRoutes } from './assessments.js';
+import { submissionRoutes } from './submissions.js';
 import { catalogRoutes } from './catalog.js';
 import { flashcardRoutes } from './flashcards.js';
 import { dictionaryRouter } from "./dictionary.js";
@@ -42,6 +46,7 @@ export function createApp(db: PrismaClient, config: Config, sendReset: SendReset
   app.post('/api/study/attempts/:id/feedback', mediaLimit);
   app.post('/api/study/lessons', authenticated, express.json({ limit: '128kb' }));
   app.put('/api/study/lessons/:id', authenticated, express.json({ limit: '128kb' }));
+  app.post('/api/ai/visual-vocabulary', authenticated, express.json({limit:'6mb'}));
   app.use(express.json({ limit: '32kb' }));
   const authLimit = rateLimit({ windowMs: 15 * 60_000, limit: 30, standardHeaders: 'draft-8', legacyHeaders: false,
     message: { error: { status: 429, message: 'Bạn thử quá nhiều lần. Vui lòng thử lại sau 15 phút.' } } });
@@ -66,6 +71,11 @@ export function createApp(db: PrismaClient, config: Config, sendReset: SendReset
     next();
   }
 
+  app.use('/api', tutorRoutes(db, config, authenticated, mediaLimit));
+  app.use('/api/media/listening', express.static('resources/listening', {index:false, dotfiles:'deny'}));
+  app.use('/api', passageRoutes(db, authenticated));
+  app.use('/api', assessmentRoutes(db, config, authenticated, mediaLimit));
+  app.use('/api', submissionRoutes(db, config, authenticated, mediaLimit));
   app.use('/api', catalogRoutes(db, authenticated));
   app.use('/api', flashcardRoutes(db, authenticated));
   app.use('/api/words', dictionaryRouter(authenticated));
@@ -75,9 +85,10 @@ export function createApp(db: PrismaClient, config: Config, sendReset: SendReset
     ok(res, { status: 'ok', app: 'AstraLingo', database: 'connected' });
   });
   app.post('/api/auth/register', async (req, res) => {
-    const input = z.object({ name: z.string().trim().min(2, 'Tên cần ít nhất 2 ký tự.').max(60), email, password, supportsRefresh: z.boolean().default(false) }).parse(req.body);
+    const input = z.object({ name: z.string().trim().min(2, 'Tên cần ít nhất 2 ký tự.').max(60), email, password, supportsRefresh: z.boolean().default(false) }).parse({ ...req.body, name: req.body?.name ?? req.body?.fullName });
     const user = await db.user.create({ data: { name: input.name, email: input.email, passwordHash: await hash(input.password, 12) } });
-    ok(res, await startSession(db, config, user.id, user.tokenVersion, input.supportsRefresh), 201);
+    const session = await startSession(db, config, user.id, user.tokenVersion, input.supportsRefresh);
+    ok(res, { ...session, id: user.id, user: { ...session.user, fullName: user.name } }, 201);
   });
   app.post('/api/auth/login', async (req, res) => {
     const input = z.object({ email, password: z.string().min(1).refine(value => Buffer.byteLength(value, 'utf8') <= 72, 'Mật khẩu quá dài (tối đa 72 byte).'),
@@ -86,7 +97,8 @@ export function createApp(db: PrismaClient, config: Config, sendReset: SendReset
     // A fixed valid bcrypt hash keeps missing-account comparisons on the same slow path.
     const valid = await compare(input.password, user?.passwordHash ?? '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYwAQJC0vBaIvTUsWEIWRWgvJm6R8jB.');
     if (!user || !valid) throw new ApiError(401, 'Email hoặc mật khẩu chưa chính xác.');
-    ok(res, await startSession(db, config, user.id, user.tokenVersion, input.supportsRefresh));
+    const session = await startSession(db, config, user.id, user.tokenVersion, input.supportsRefresh);
+    ok(res, { ...session, user: { ...session.user, fullName: user.name } });
   });
   app.get('/api/auth/me', authenticated, async (_req, res) => {
     ok(res, await db.user.findUnique({ where: { id: res.locals.user.id }, select: publicUser }));

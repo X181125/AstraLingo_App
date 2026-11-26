@@ -1,3 +1,4 @@
+import { LanguageCoach } from '../../components/LanguageCoach';
 import React, { useState } from 'react';
 import { View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -23,6 +24,9 @@ export default function PracticeScreen() {
 }
 
 function PracticeContent({ lesson, path }: { lesson: Practice; path: string }) {
+  const { panel } = useLocalSearchParams<{panel?:string}>();
+  const [section, setSection] = useState(panel ?? 'overview');
+  const overview = section === 'overview';
   const auth = useAuth();
   const action = useAction();
   const attempts = useFocusedData<Attempt[]>(path + '/attempts');
@@ -35,7 +39,6 @@ function PracticeContent({ lesson, path }: { lesson: Practice; path: string }) {
   const [audioId, setAudioId] = useState<string>();
   const [draftId, setDraftId] = useState<string>();
   const [outline, setOutline] = useState('');
-  const [listeningGuide, setListeningGuide] = useState('');
   const [kind, setKind] = useState<Annotation['kind']>('HIGHLIGHT');
   const [quote, setQuote] = useState('');
   const [note, setNote] = useState('');
@@ -76,35 +79,30 @@ function PracticeContent({ lesson, path }: { lesson: Practice; path: string }) {
 
   return <>
     <ActionNotice action={action} />
-    <Section title={objective ? lesson.contentType === 'READING' ? 'Bài đọc' : 'Âm thanh và transcript' : 'Đề bài'}>
+    <Choices values={objective ? ['overview','practice','history','notes'] : ['overview','practice','history']} value={section}
+      label={s => ({overview:'Toàn bài',practice:'Làm bài',history:'Lịch sử',notes:'Ghi chú'}[s] ?? s)} onChange={setSection} />
+    {overview && <Section title={objective ? lesson.contentType === 'READING' ? 'Bài đọc' : 'Âm thanh và transcript' : 'Đề bài'}>
       {lesson.contentType === 'LISTENING'
-        ? <Listen body={lesson.body} transcript={lesson.transcript} audioId={lesson.audioId} highlights={highlights} />
+        ? <Listen body={lesson.body} transcript={lesson.transcript} audioId={lesson.audioId} audioUrl={lesson.audioUrl} highlights={highlights} />
         : <Panel><Copy selectable><Highlighted text={lesson.body} quotes={highlights} /></Copy></Panel>}
-      {lesson.contentType === 'LISTENING' && ai.data?.gemini && <Button label="Gợi ý luyện nghe và phát âm" secondary disabled={action.busy} onPress={() => void action.run(async () => {
-        const result = await api<{ text: string }>('/learn/ai', { token: auth.token, method: 'POST', timeoutMs: 55_000,
-          body: { task: 'listening-guide', text: lesson.body } });
-        setListeningGuide(result.text);
-      })} />}
-      {!!listeningGuide && <Panel><Copy selectable>{listeningGuide}</Copy></Panel>}
-    </Section>
+    </Section>}
+    {overview && ai.data?.gemini && (writing || lesson.contentType === 'LISTENING') &&
+      <LanguageCoach kind={writing ? 'writing' : 'listening'} id={lesson.publicId} />}
     {!published && <Panel><Copy>Bản xem trước của bài {lesson.status === 'DRAFT' ? 'nháp' : 'đã lưu trữ'}. Xuất bản để nhận bài làm.</Copy></Panel>}
-    {objective && published && lesson.questions.length > 0 && <Section title="Bài đánh giá">
+    {(overview || section === 'practice') && objective && published && <Button label="Các bộ câu hỏi và lượt làm" icon="albums-outline" secondary onPress={() => router.push({ pathname:'/practice/assessments',
+      params:{id:String(lesson.publicId),kind:lesson.contentType.toLowerCase()} })} />}
+    {(overview || section === 'practice') && objective && published && lesson.questions.length > 0 && <Section title="Bài đánh giá">
       <Questions questions={lesson.questions} selections={answers} onChange={setAnswers} />
       <Button label="Nộp đáp án" loading={action.busy} onPress={() => void action.run(async () => {
         const item = await api<Attempt>(path + '/assessment', { token: auth.token, method: 'POST',
           body: { answers: lesson.questions.map((_, index) => answers[index] ?? -1) } });
-        setSelected(item); attempts.reload();
+        setSelected(item); attempts.reload(); if (!overview) setSection('history');
       })} />
     </Section>}
-    {!objective && published && <Section title={writing ? 'Soạn bài viết' : 'Ghi âm và nộp bài'}>
+    {(overview || section === 'practice') && !objective && published && <Section title={writing ? 'Soạn bài viết' : 'Ghi âm và nộp bài'}>
       {writing ? <>
         <Input label="Bài viết của bạn" multiline value={text} onChangeText={setText} maxLength={15_000} editable={!action.busy} />
         <Copy>{text.trim().split(/\s+/).filter(Boolean).length} từ</Copy>
-        {ai.data?.gemini && <Button label="Gợi ý ý tưởng và dàn ý AI" secondary disabled={action.busy} onPress={() => void action.run(async () => {
-          const result = await api<{ text: string }>('/learn/ai', { token: auth.token, method: 'POST', timeoutMs: 55_000,
-            body: { task: 'outline', text: lesson.body } });
-          setOutline(result.text);
-        })} />}
         {ai.data?.gemini && <Button label="Nhận gợi ý sửa bản nháp" secondary disabled={action.busy || !text.trim()} onPress={() => void action.run(async () => {
           const result = await api<{ text: string }>('/learn/ai', { token: auth.token, method: 'POST', timeoutMs: 55_000,
             body: { task: 'writing-revision', text: `Đề bài: ${lesson.body.slice(0, 3500)}\nBản nháp: ${text.slice(0, 6400)}` } });
@@ -118,12 +116,16 @@ function PracticeContent({ lesson, path }: { lesson: Practice; path: string }) {
       <Button label="Lưu bản nháp" secondary loading={action.busy} disabled={!draftId && !text.trim() && !audio && !audioId} onPress={() => void action.run(() => save(false))} />
       <Button label="Nộp bài" loading={action.busy} disabled={writing ? !text.trim() : !audio && !audioId} onPress={() => void action.run(() => save(true))} />
     </Section>}
-    <Section title="Lịch sử và kết quả">
+    {(overview || section === 'history') && <Section title="Lịch sử và kết quả">
       <Pending {...attempts} />
       {attempts.data?.length === 0 && <Copy>Chưa có bài làm.</Copy>}
       {attempts.data?.map(item => <Panel key={item.id}>
         <Copy>{new Date(item.updatedAt).toLocaleString('vi-VN')} · {item.state === 'DRAFT' ? 'Bản nháp' : item.score == null ? 'Đã nộp, chờ chấm' : `${item.score}/100`}</Copy>
-        <Button secondary label={item.state === 'DRAFT' ? 'Tiếp tục bản nháp' : 'Xem bài làm'} onPress={() => selectAttempt(item)} />
+        <Button secondary label={item.state === 'DRAFT' ? 'Tiếp tục bản nháp' : 'Xem bài làm'} onPress={() => { selectAttempt(item); if (item.state === 'DRAFT' && !overview) setSection('practice'); }} />
+        {!objective && item.state !== 'DRAFT' && <Button secondary label={writing ? 'Viết lại từ bài này' : 'Luyện lại từ bản ghi này'} icon="copy-outline" disabled={action.busy} onPress={() => void action.run(async () => {
+          await api(`/${writing ? 'writing' : 'speaking'}-submissions/${item.publicId}/reopen-as-draft`, { token: auth.token, method: 'POST' });
+          attempts.reload(); action.setSuccess('Đã tạo bản nháp để luyện lại.');
+        })} />}
       </Panel>)}
       {selected && selected.state !== 'DRAFT' && <Panel>
         {!!selected.response.text && <Copy selectable>{selected.response.text}</Copy>}
@@ -131,15 +133,15 @@ function PracticeContent({ lesson, path }: { lesson: Practice; path: string }) {
         {selected.state === 'SUBMITTED' && (ai.data?.gemini
           ? <Button label="Chấm và nhận phản hồi AI" loading={action.busy} onPress={() => void action.run(async () => {
             const item = await api<Attempt>(`/study/attempts/${selected.id}/feedback`, { token: auth.token, method: 'POST', timeoutMs: 55_000 });
-            setSelected(item); attempts.reload();
+            setSelected(item); attempts.reload(); if (!overview) setSection('history');
           })} />
           : <Copy>Máy chủ cần cấu hình Gemini để chấm bài.</Copy>)}
         {selected.feedback && ('details' in selected.feedback
           ? <Answers result={selected.feedback as AnswerResult} />
           : <FeedbackView feedback={selected.feedback} />)}
       </Panel>}
-    </Section>
-    {objective && <>
+    </Section>}
+    {(overview || section === 'notes') && objective && <>
       <Section title="Ghi chú và dấu trang">
         <Choices values={markTypes} value={kind} label={item => markName[item]} onChange={setKind} />
         {kind !== 'BOOKMARK' && <Input label="Đoạn trích nguyên văn" value={quote} onChangeText={setQuote} maxLength={500} />}
@@ -166,7 +168,7 @@ function PracticeContent({ lesson, path }: { lesson: Practice; path: string }) {
           await api('/study/words', { token: auth.token, method: 'PUT', body: { word, meaning } });
           setWord(''); setMeaning(''); action.setSuccess('Đã lưu từ vựng.');
         })} />
-        <Button label="Mở từ điển và từ đã lưu" secondary onPress={() => router.push('/(tabs)/dictionary')} />
+        <Button label="Mở từ điển và từ đã lưu" secondary onPress={() => router.push('/dictionary?mode=saved')} />
       </Section>
     </>}
     <View style={{ gap: 10, borderTopWidth: 1, borderColor: c.border, paddingTop: 16 }}>

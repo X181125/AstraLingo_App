@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { Text } from "@/components/typography";
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Button } from '../../../components/UI';
 import { Choice, Copy, LearningScreen, Pending, Section, useFocusedData } from '../../../components/Learning';
 import { DiscoveryRow, IconTile, SearchBox, Segments, skillVisuals, type IconName } from '../../../components/DiscoveryUI';
@@ -20,8 +20,13 @@ const statusName = { DRAFT: 'Nháp', PUBLISHED: 'Đã xuất bản', ARCHIVED: '
 
 export default function Study() {
   const c = useAppColors();
-  const [view, setView] = useState<'explore' | 'mine'>('explore');
-  const [skill, setSkill] = useState<'all' | Skill>('all');
+  const params = useLocalSearchParams<{ skill?: Skill; view?: string }>();
+  const [view, setView] = useState<'explore' | 'mine'>(params.view === 'mine' ? 'mine' : 'explore');
+  const [skill, setSkill] = useState<'all' | Skill>(params.skill && skills.includes(params.skill) ? params.skill : 'all');
+  React.useEffect(() => {
+    setSkill(params.skill && skills.includes(params.skill) ? params.skill : 'all');
+    setView(params.view === 'mine' ? 'mine' : 'explore'); setPage(1);
+  }, [params.skill, params.view]);
   const [q, setQ] = useState('');
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);

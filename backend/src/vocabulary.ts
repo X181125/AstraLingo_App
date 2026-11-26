@@ -80,7 +80,8 @@ export function vocabularyRouter(db: PrismaClient, config: Config, auth: Request
   });
   router.get('/decks/:id', async (req, res) => {
     const userId = res.locals.user.id as string;
-    const deck = await db.deck.findFirst({ where: { id: id.parse(req.params.id), OR: [{ ownerId: userId }, { isPublic: true }] },
+    const key = id.parse(req.params.id);
+    const deck = await db.deck.findFirst({ where: { ...(/^\d{1,9}$/.test(key) ? {publicId:Number(key)} : {id:key}), OR: [{ ownerId: userId }, { isPublic: true }] },
       include: { cards: { orderBy: { id: 'asc' }, include: { reviews: { where: { userId } } } } } });
     if (!deck) throw new ApiError(404, 'Không tìm thấy bộ thẻ.');
     ok(res, deck);

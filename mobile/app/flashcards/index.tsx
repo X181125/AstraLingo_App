@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { ActionNotice, Choices, Copy, Input, LearningScreen, Panel, Pending, Section, useAction, useFocusedData } from '../../components/Learning';
 import { Button } from '../../components/UI';
 import { api } from '../../src/api';
@@ -9,7 +9,8 @@ import type { Deck, Page } from '../../src/learning';
 export default function Flashcards() {
   const { token } = useAuth();
   const action = useAction();
-  const [view, setView] = useState<'mine' | 'explore'>('mine');
+  const params = useLocalSearchParams<{view?:string}>();
+  const [view, setView] = useState<'mine' | 'explore'>(params.view === 'explore' ? 'explore' : 'mine');
   const [page, setPage] = useState(1);
   const [title, setTitle] = useState('');
   const [q, setQ] = useState('');

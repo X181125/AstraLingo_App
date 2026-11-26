@@ -21,8 +21,8 @@ Mở [AstraLingo trên máy](http://localhost:8080), đăng ký rồi chọn m�
 |---|---|
 | Tài khoản | Đăng ký, đăng nhập, đổi mật khẩu bằng mã email, khôi phục và làm mới phiên. Thiết lập mục tiêu, trình độ, giao diện và thời lượng học. |
 | Home | Tìm kiếm, lọc theo kỹ năng và trình độ, mở chi tiết khóa, ghi danh rồi vào bài luyện. Mục Top Mentor dùng nhân vật minh họa để dẫn tới khóa học theo kỹ năng. |
-| Học tập | Khám phá bài công khai, tạo và sửa bài cá nhân, soạn câu hỏi, xuất bản, sao chép và báo cáo. |
-| Reading và Listening | Đọc đoạn văn hoặc nghe audio, mở transcript, nghe chậm, đánh dấu, lưu từ, trả lời câu hỏi và xem giải thích. Bài nghe chỉ có transcript có thể dùng giọng đọc trên thiết bị. |
+| Học tập | Khám phá bài công khai, tạo và sửa bài cá nhân, soạn câu hỏi, xuất bản, sao chép và báo cáo. Tác giả có thể tạo nhiều bộ câu hỏi đọc/nghe, chọn bộ đang dùng và giữ lịch sử riêng cho từng lượt. |
+| Reading và Listening | Đọc đoạn văn hoặc nghe audio, mở transcript, nghe chậm, đánh dấu, lưu từ, trả lời câu hỏi và xem giải thích. Năm bài nghe mẫu có sẵn audio và mốc thời gian. Bài tự soạn chỉ có transcript có thể dùng giọng đọc trên thiết bị. |
 | Speaking và Writing | Ghi và nghe lại bài nói, soạn bài viết, lưu nháp, nộp bài và xem lịch sử. Bật Gemini để nhận góp ý theo tiêu chí. |
 | Online Exam | Tám đề luyện SAT Reading and Writing số 4–11, mỗi đề 66 câu và hai module. Làm bài theo đồng hồ, lưu lựa chọn và xem số câu đúng cùng lịch sử. Điểm hiển thị là điểm thô. Mở đề gốc của College Board cần mạng. |
 | Mini Quiz | Chọn chủ đề để bắt đầu, trả lời, nộp và xem điểm. Bộ câu hỏi và audio dự phòng đi cùng repo để dùng khi nhà cung cấp tạm ngừng. |
@@ -39,7 +39,7 @@ Mở [AstraLingo trên máy](http://localhost:8080), đăng ký rồi chọn m�
 
 ### API
 
-Frontend và backend dùng chung hợp đồng được kiểm thử trong [backend/test/api.test.ts](backend/test/api.test.ts). Các nhóm API gồm `/api/auth`, `/api/account`, `/api/courses`, `/api/study`, `/api/learn` và `/api/exams`. API tài nguyên cho ứng dụng di động còn có `/api/users/me`, `/api/user-levels`, `/api/content-categories`, `/api/content-items`, `/api/words`, `/api/flashcard-decks`, `/api/flashcards` và `/api/flashcard-progress`. API yêu cầu phiên nhận JWT bằng header `Authorization: Bearer <token>`. Kiểm tra kết nối database tại [API health](http://localhost:8080/api/health).
+Frontend và backend dùng chung hợp đồng được kiểm thử trong [backend/test/api.test.ts](backend/test/api.test.ts). Các nhóm API gồm `/api/auth`, `/api/account`, `/api/courses`, `/api/study`, `/api/learn` và `/api/exams`. API tài nguyên cho ứng dụng di động còn có `/api/users/me`, `/api/user-levels`, `/api/content-categories`, `/api/content-items`, `/api/words`, `/api/flashcard-decks`, `/api/flashcards` và `/api/flashcard-progress`. Các bộ đánh giá, bản nháp và trợ lý kỹ năng được phục vụ qua `/api/reading-passages`, `/api/listening-audios`, `/api/speaking-prompts`, `/api/writing-prompts` cùng các tài nguyên lượt làm/bài nộp tương ứng. API yêu cầu phiên nhận JWT bằng header `Authorization: Bearer <token>`. Kiểm tra kết nối database tại [API health](http://localhost:8080/api/health).
 
 ### Phát triển trên thiết bị
 

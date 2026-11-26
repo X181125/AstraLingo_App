@@ -1,14 +1,15 @@
+import { router, useLocalSearchParams } from 'expo-router';
 import React, { useState } from 'react';
 import { View } from "react-native";
 import { Text } from "@/components/typography";
 import * as ImagePicker from 'expo-image-picker';
-import { ActionNotice, Copy, LearningScreen, Panel, Pending, Section, useAction, useFocusedData } from '../../components/Learning';
-import { IconTile, SearchBox, Segments } from '../../components/DiscoveryUI';
-import { Button } from '../../components/UI';
-import { api } from '../../src/api';
-import { useAuth } from '../../src/auth';
-import type { CardInput, Word } from '../../src/learning';
-import { useAppColors } from '../../src/theme';
+import { ActionNotice, Copy, LearningScreen, Panel, Pending, Section, useAction, useFocusedData } from '../../../components/Learning';
+import { IconTile, SearchBox, Segments } from '../../../components/DiscoveryUI';
+import { Button } from '../../../components/UI';
+import { api } from '../../../src/api';
+import { useAuth } from '../../../src/auth';
+import type { CardInput, Word } from '../../../src/learning';
+import { useAppColors } from '../../../src/theme';
 
 const modes = [{ id: 'lookup', label: 'Tra từ' }, { id: 'image', label: 'Tra qua ảnh' }, { id: 'saved', label: 'Từ đã lưu' }] as const;
 type Mode = typeof modes[number]['id'];
@@ -16,11 +17,11 @@ type Mode = typeof modes[number]['id'];
 export default function Dictionary() {
   const { token } = useAuth();
   const action = useAction();
-  const [mode, setMode] = useState<Mode>('lookup');
+  const { mode: selectedMode } = useLocalSearchParams<{ mode?: string }>();
+  const mode: Mode = selectedMode === 'image' || selectedMode === 'saved' ? selectedMode : 'lookup';
   const [page, setPage] = useState(1);
   const [input, setInput] = useState('');
   const [query, setQuery] = useState('');
-  const [explanation, setExplanation] = useState<{ query: string; text: string }>();
   const [imageWords, setImageWords] = useState<CardInput[]>([]);
   const glossary = useFocusedData<{ items: Word[]; total: number; hasMore: boolean }>(mode === 'lookup' ? '/learn/dictionary?page=' + page + '&q=' + encodeURIComponent(query) : null);
   const saved = useFocusedData<Word[]>('/study/words');
@@ -49,8 +50,9 @@ export default function Dictionary() {
   }
 
   return <LearningScreen title="Từ điển" subtitle="Tra từ, đọc ví dụ và lưu lại từ vựng của bạn.">
-    <Segments items={modes} selected={mode} onChange={setMode} />
+    <Segments items={modes} selected={mode} onChange={value => router.setParams({ mode: value })} />
     <ActionNotice action={action} />
+    {mode === 'lookup' && ai.data?.gemini && <Button label="Giải thích từ hoặc câu" secondary icon="sparkles-outline" onPress={() => router.push('/dictionary/ai_explain')} />}
     {mode === 'lookup' && <Section title="Từ điển tiếng Anh">
       <SearchBox label="Từ hoặc câu tiếng Anh" placeholder="Nhập từ hoặc câu tiếng Anh…" submitLabel="Tìm trong từ điển"
         value={input} onChange={setInput} onSubmit={() => { setPage(1); setQuery(input.trim()); }} clear={() => { setPage(1); setInput(''); setQuery(''); }} />
@@ -64,15 +66,6 @@ export default function Dictionary() {
         {page > 1 && <Button label="Trang trước" secondary onPress={() => setPage(page - 1)} />}
         {glossary.data?.hasMore && <Button label="Trang sau" secondary onPress={() => setPage(page + 1)} />}
       </View>
-      {ai.data?.gemini && <Button label="Smart Insight · giải thích theo ngữ cảnh" secondary loading={action.busy} disabled={!input.trim()}
-        onPress={() => void action.run(async () => {
-          const query = input.trim();
-          const result = await api<{ text: string }>('/learn/ai', { token, method: 'POST', timeoutMs: 55_000, body: { task: 'explain', text: query } });
-          setExplanation({ query, text: result.text });
-        })} />}
-      {explanation && <Panel><Copy selectable>{explanation.text}</Copy>
-        <Button label="Lưu giải thích" secondary disabled={action.busy} onPress={() => void action.run(() => save(explanation.query, explanation.text))} />
-      </Panel>}
     </Section>}
     {mode === 'image' && <Section title="Visual Vocabulary">
       {ai.data?.gemini ? <>

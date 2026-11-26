@@ -20,8 +20,8 @@ export function IconTile({ icon, background, ink, size = 44 }: { icon: IconName;
   </View>;
 }
 
-export function SearchBox({ label, submitLabel = 'Tìm kiếm', placeholder, value, onChange, onSubmit, clear }: {
-  label: string; submitLabel?: string; placeholder: string; value: string; onChange: (value: string) => void; onSubmit: () => void; clear: () => void;
+export function SearchBox({ label, submitLabel = 'Tìm kiếm', placeholder, value, onChange, onSubmit, clear, autoFocus }: {
+  autoFocus?: boolean; label: string; submitLabel?: string; placeholder: string; value: string; onChange: (value: string) => void; onSubmit: () => void; clear: () => void;
 }) {
   const c = useAppColors();
   const [focused, setFocused] = React.useState(false);
@@ -29,7 +29,7 @@ export function SearchBox({ label, submitLabel = 'Tìm kiếm', placeholder, val
     <Pressable accessibilityRole="button" accessibilityLabel={submitLabel} onPress={onSubmit} style={s.iconButton}>
       <Ionicons name="search-outline" size={21} color={c.purpleDark} />
     </Pressable>
-    <TextInput accessibilityLabel={label} value={value} onChangeText={onChange} onSubmitEditing={onSubmit} maxLength={100}
+    <TextInput autoFocus={autoFocus} accessibilityLabel={label} value={value} onChangeText={onChange} onSubmitEditing={onSubmit} maxLength={100}
       placeholder={placeholder} placeholderTextColor={c.muted} autoCorrect={false} returnKeyType="search"
       onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
       style={[s.searchInput, { color: c.ink }, Platform.OS === 'web' && { outlineStyle: 'none' } as any]} />
