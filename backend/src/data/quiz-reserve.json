@@ -1,0 +1,609 @@
+[
+  {
+    "id": "english-grammar",
+    "title": "English Grammar Quiz",
+    "tags": [
+      "Grammar",
+      "English"
+    ],
+    "durationMin": 8,
+    "questions": [
+      {
+        "prompt": "What grammatical unit can be simple, compound or complex?",
+        "options": [
+          "Sentence",
+          "Word",
+          "Clause",
+          "Conjunction"
+        ],
+        "correct": 0,
+        "explanation": ""
+      },
+      {
+        "prompt": "What type of word indicates an action?",
+        "options": [
+          "Noun",
+          "Adjective",
+          "Verb",
+          "Preposition"
+        ],
+        "correct": 2,
+        "explanation": ""
+      },
+      {
+        "prompt": "Which part of speech is 'hastily'?",
+        "options": [
+          "Adjective",
+          "Noun",
+          "Adverb",
+          "Conjunction"
+        ],
+        "correct": 2,
+        "explanation": ""
+      },
+      {
+        "prompt": "What figure of speech combines contradictory terms?",
+        "options": [
+          "Metaphor",
+          "Synecdoche",
+          "Ellipsis",
+          "Oxymoron"
+        ],
+        "correct": 3,
+        "explanation": ""
+      },
+      {
+        "prompt": "What is the plural of \"radius\"?",
+        "options": [
+          "Radies",
+          "Radiusses",
+          "Radii",
+          "Radiants"
+        ],
+        "correct": 2,
+        "explanation": ""
+      },
+      {
+        "prompt": "What word refers to a set of letters placed after the stem of a word?",
+        "options": [
+          "Infix",
+          "Interfix",
+          "Prefix",
+          "Suffix"
+        ],
+        "correct": 3,
+        "explanation": ""
+      },
+      {
+        "prompt": "Which of these is a proper noun?",
+        "options": [
+          "Paris",
+          "Trip",
+          "Road",
+          "Door"
+        ],
+        "correct": 0,
+        "explanation": ""
+      },
+      {
+        "prompt": "What type of comparison is the phrase 'He was like an eagle chained to the ground' an example of?",
+        "options": [
+          "An allegory",
+          "A simile",
+          "A hyperbole",
+          "A metaphor"
+        ],
+        "correct": 1,
+        "explanation": ""
+      }
+    ],
+    "audio": null,
+    "passage": "Choose one answer for each question."
+  },
+  {
+    "id": "english-words",
+    "title": "English Vocabulary Quiz",
+    "tags": [
+      "Vocabulary",
+      "English"
+    ],
+    "durationMin": 12,
+    "questions": [
+      {
+        "prompt": "Who is the brother of your mother?",
+        "options": [
+          "Grandfather",
+          "Nephew",
+          "Uncle",
+          "Brother-in-law"
+        ],
+        "correct": 2,
+        "explanation": ""
+      },
+      {
+        "prompt": "What 3-letter word can precede cord, current, off, and saw?",
+        "options": [
+          "Cut",
+          "Rip",
+          "Dry",
+          "Fly"
+        ],
+        "correct": 1,
+        "explanation": ""
+      },
+      {
+        "prompt": "What term refers to a metal-plated wooden warship?",
+        "options": [
+          "Plated dragon",
+          "Metallica",
+          "Ironclad",
+          "Steeler"
+        ],
+        "correct": 2,
+        "explanation": ""
+      },
+      {
+        "prompt": "What term, coined in the 1980s, refers to a youthful metropolitan white-collar worker?",
+        "options": [
+          "A hipster",
+          "A beatnik",
+          "A bohemian",
+          "A yuppie"
+        ],
+        "correct": 3,
+        "explanation": ""
+      },
+      {
+        "prompt": "What's the opposite of the orient?",
+        "options": [
+          "The Norient",
+          "The Orrious",
+          "Leyton",
+          "The Occident"
+        ],
+        "correct": 3,
+        "explanation": ""
+      },
+      {
+        "prompt": "Which of these words refers to the scattering of a population away from its origin?",
+        "options": [
+          "Gromolus",
+          "Emorgista",
+          "Pentecost",
+          "Diaspora"
+        ],
+        "correct": 3,
+        "explanation": ""
+      },
+      {
+        "prompt": "Which of these is a prefix used to refer to oil or oil-based materials?",
+        "options": [
+          "Ola-",
+          "Olmo-",
+          "Oleo-",
+          "Olic-"
+        ],
+        "correct": 2,
+        "explanation": ""
+      },
+      {
+        "prompt": "What does the word \"chlorophyll\" mean in its Greek origin?",
+        "options": [
+          "Juicy fruit",
+          "Brown bark",
+          "Green leaf",
+          "Red flower"
+        ],
+        "correct": 2,
+        "explanation": ""
+      },
+      {
+        "prompt": "What culinary term, often referring to a first-class cook, literally means 'Blue Ribbon'?",
+        "options": [
+          "Bleu Lundi",
+          "Bleu du Fafa",
+          "Sacre Bleu",
+          "Cordon Bleu"
+        ],
+        "correct": 3,
+        "explanation": ""
+      },
+      {
+        "prompt": "What word is used when a candidate receives an overwhelming majority of votes in an election?",
+        "options": [
+          "Tsunami",
+          "Landslide",
+          "Firestorm",
+          "Stampede"
+        ],
+        "correct": 1,
+        "explanation": ""
+      },
+      {
+        "prompt": "What is the slang term for removing body hair from men?",
+        "options": [
+          "Bodyculture",
+          "Guydening",
+          "Manscaping",
+          "Topihairy"
+        ],
+        "correct": 2,
+        "explanation": ""
+      },
+      {
+        "prompt": "What is the term for the art or study of using language to persuade, which comes from the Greek word for \"orator\"?",
+        "options": [
+          "Syntax",
+          "Didactic",
+          "Rhetoric",
+          "Semantics"
+        ],
+        "correct": 2,
+        "explanation": ""
+      }
+    ],
+    "audio": null,
+    "passage": "Choose one answer for each question."
+  },
+  {
+    "id": "english-idioms",
+    "title": "English Idioms Quiz",
+    "tags": [
+      "Idioms",
+      "English"
+    ],
+    "durationMin": 8,
+    "questions": [
+      {
+        "prompt": "Which expression, originating from baseball, means to keep someone informed briefly?",
+        "options": [
+          "Home run",
+          "Touch base",
+          "Grand slam",
+          "Out of left field"
+        ],
+        "correct": 1,
+        "explanation": ""
+      },
+      {
+        "prompt": "In slang, what term is used to describe a friend who is as close as a sibling, but not related by blood?",
+        "options": [
+          "Soulmate",
+          "Comrade",
+          "Brother from another mother",
+          "BFF"
+        ],
+        "correct": 2,
+        "explanation": ""
+      },
+      {
+        "prompt": "What body part are you said to have 'in the door' if you're lucky, and 'in the grave' if you're not?",
+        "options": [
+          "a foot",
+          "a hand",
+          "an ear",
+          "a nose"
+        ],
+        "correct": 0,
+        "explanation": ""
+      },
+      {
+        "prompt": "What is the traditional cry heard when a whaling boat spots a whale?",
+        "options": [
+          "Land Ahoy!",
+          "Dive! Dive! Dive!",
+          "Thar she blows!",
+          "Look alive, boys!"
+        ],
+        "correct": 2,
+        "explanation": ""
+      },
+      {
+        "prompt": "What term represents the belief that if something can go wrong, it will?",
+        "options": [
+          "Newton's law",
+          "Mendel's law",
+          "Boyle's law",
+          "Murphy's law"
+        ],
+        "correct": 3,
+        "explanation": ""
+      },
+      {
+        "prompt": "What Yiddish phrase is used to to express dismay or frustration?",
+        "options": [
+          "L'chaim",
+          "Shalom",
+          "Mazel tov",
+          "Oy vey"
+        ],
+        "correct": 3,
+        "explanation": ""
+      },
+      {
+        "prompt": "Which popular idiom refers to a child inheriting traits or qualities of their parents?",
+        "options": [
+          "A bird in the hand is worth two in the bush",
+          "The apple doesn't fall far from the tree",
+          "It's raining cats and dogs",
+          "Money doesn't grow on trees"
+        ],
+        "correct": 1,
+        "explanation": ""
+      },
+      {
+        "prompt": "The phrase 'Dutch courage' is said to come from soldiers drinking which spirit?",
+        "options": [
+          "Rum",
+          "Vodka",
+          "Brandy",
+          "Gin"
+        ],
+        "correct": 3,
+        "explanation": ""
+      }
+    ],
+    "audio": null,
+    "passage": "Choose one answer for each question."
+  },
+  {
+    "id": "science-reading",
+    "title": "Science Reading Comprehension",
+    "tags": [
+      "Reading",
+      "English"
+    ],
+    "durationMin": 15,
+    "questions": [
+      {
+        "context": "Characteristics of life are controlled by genes, which are passed from parents to offspring, and are located on chromosomes, like the one shown here, that are found in every cell. The gene theory is one of the unifying principles of biology.",
+        "prompt": "What structures located on chromosomes control characteristics of life and are passed from parents to offspring?",
+        "options": [
+          "cells",
+          "axons",
+          "genes",
+          "eggs"
+        ],
+        "correct": 2,
+        "explanation": ""
+      },
+      {
+        "context": "Intraspecific competition occurs between members of the same species. It improves the species’ adaptations.",
+        "prompt": "Competition that occurs between members of the same species, which improves the species’ adaptations, is called what?",
+        "options": [
+          "intraspecific competition",
+          "commensalism",
+          "adaptive behavior",
+          "interspecies competition"
+        ],
+        "correct": 0,
+        "explanation": ""
+      },
+      {
+        "context": "Most common disorders of the male reproductive system involve the testes. They include injuries and cancer.",
+        "prompt": "What part of the male reproductive system is involved with the most common disorders?",
+        "options": [
+          "the ureter",
+          "the glans",
+          "the testes",
+          "the penis"
+        ],
+        "correct": 2,
+        "explanation": ""
+      },
+      {
+        "context": "Astronomers use light years as the unit to describe distances in space. Remember that a light year is the distance light travels in one year.",
+        "prompt": "What unit do astronomers use to describe distances in space?",
+        "options": [
+          "light months",
+          "gravity years",
+          "quantum years",
+          "light years"
+        ],
+        "correct": 3,
+        "explanation": ""
+      },
+      {
+        "context": "Laura Guerin. At a synapse, neurotransmitters are released to carry a nerve impulse from one neuron to the next . CC BY-NC 3.0.",
+        "prompt": "At a synapse, what objects are released to carry a nerve impulse from one neuron to the next?",
+        "options": [
+          "viruses",
+          "receptors",
+          "neurotransmitters",
+          "microorganisms"
+        ],
+        "correct": 2,
+        "explanation": ""
+      },
+      {
+        "prompt": "Silver is an example of a mineral containing only one kind of what?",
+        "options": [
+          "matter",
+          "chemical",
+          "mass",
+          "element"
+        ],
+        "correct": 3,
+        "explanation": "",
+        "context": "All minerals have a definite chemical makeup. A few minerals are made of only one kind of element. Silver is a mineral made only of silver atoms. Diamond and graphite are both made only of the element carbon."
+      },
+      {
+        "prompt": "Mollusks have a true coelom and a complete what?",
+        "options": [
+          "skeletal system",
+          "digestive system",
+          "nerve system",
+          "tissues system"
+        ],
+        "correct": 1,
+        "explanation": "",
+        "context": "Mollusks have a true coelom and complete digestive system. They also have circulatory and excretory systems. They have a heart that pumps blood, and organs that filter out wastes from the blood."
+      },
+      {
+        "prompt": "What type of matter makes up most of the universe?",
+        "options": [
+          "gas",
+          "liquid",
+          "plasma",
+          "carbon"
+        ],
+        "correct": 2,
+        "explanation": "",
+        "context": "Can you guess what this picture shows? The purple and blue \"flames\" are matter in a particular state. You’re probably familiar with the states of matter most common on Earth — solids, liquids, and gases. But these \"flames\" are a state of matter called plasma. This plasma ball was made by humans. Plasma also occurs in nature. In fact, plasma makes up most of the matter in the universe."
+      },
+      {
+        "prompt": "Proteins are polymers of what kind of acids?",
+        "options": [
+          "lipids",
+          "lactic",
+          "acetic",
+          "amino"
+        ],
+        "correct": 3,
+        "explanation": "",
+        "context": "Proteins are polymers of amino acids, which act as the monomers."
+      },
+      {
+        "prompt": "What is the official name for the study of life?",
+        "options": [
+          "geology",
+          "chemistry",
+          "botany",
+          "biology"
+        ],
+        "correct": 3,
+        "explanation": "",
+        "context": "The study of biology is the study of life. Concept Biology Advanced is the CK-12 Foundation's most extensive material describing the study of life. Concept Biology Advanced presents biology as a set of 18 concepts, with each concept centered around a specific category, such as cell biology or plants. Each concept is comprised of a series of lessons, with each lesson focusing on one specific topic. The complete Concept Biology Advanced is comprised of over 550 lessons. This material has been developed to complement the most advanced secondary-level biology course."
+      }
+    ],
+    "passage": "Read each short passage and use it to answer the question.",
+    "audio": null
+  },
+  {
+    "id": "english-listening",
+    "title": "English Listening Quiz",
+    "tags": [
+      "Listening",
+      "English"
+    ],
+    "durationMin": 6,
+    "questions": [
+      {
+        "prompt": "Recording 1 · Which word do you hear?",
+        "recording": {
+          "audio": "https://api.dictionaryapi.dev/media/pronunciations/en/cap-au.mp3",
+          "sourceUrl": "https://commons.wikimedia.org/w/index.php?curid=75899770",
+          "license": {
+            "name": "BY-SA 4.0",
+            "url": "https://creativecommons.org/licenses/by-sa/4.0"
+          }
+        },
+        "options": [
+          "cap",
+          "cup",
+          "cab",
+          "cub"
+        ],
+        "correct": 0,
+        "explanation": ""
+      },
+      {
+        "prompt": "Recording 2 · Which word do you hear?",
+        "recording": {
+          "audio": "https://api.dictionaryapi.dev/media/pronunciations/en/fan-uk.mp3",
+          "sourceUrl": "https://commons.wikimedia.org/w/index.php?curid=90913976",
+          "license": {
+            "name": "BY-SA 4.0",
+            "url": "https://creativecommons.org/licenses/by-sa/4.0"
+          }
+        },
+        "options": [
+          "fan",
+          "van",
+          "vine",
+          "fin"
+        ],
+        "correct": 0,
+        "explanation": ""
+      },
+      {
+        "prompt": "Recording 3 · Which word do you hear?",
+        "recording": {
+          "audio": "https://api.dictionaryapi.dev/media/pronunciations/en/pole-us.mp3",
+          "sourceUrl": "https://commons.wikimedia.org/w/index.php?curid=50330745",
+          "license": {
+            "name": "BY-SA 4.0",
+            "url": "https://creativecommons.org/licenses/by-sa/4.0"
+          }
+        },
+        "options": [
+          "pool",
+          "pull",
+          "pole",
+          "pale"
+        ],
+        "correct": 2,
+        "explanation": ""
+      },
+      {
+        "prompt": "Recording 4 · Which word do you hear?",
+        "recording": {
+          "audio": "https://api.dictionaryapi.dev/media/pronunciations/en/cold-uk.mp3",
+          "sourceUrl": "https://commons.wikimedia.org/w/index.php?curid=9014341",
+          "license": {
+            "name": "BY 3.0 US",
+            "url": "https://creativecommons.org/licenses/by/3.0/us"
+          }
+        },
+        "options": [
+          "goat",
+          "cold",
+          "coat",
+          "code"
+        ],
+        "correct": 1,
+        "explanation": ""
+      },
+      {
+        "prompt": "Recording 5 · Which word do you hear?",
+        "options": [
+          "shape",
+          "sheep",
+          "ship",
+          "shop"
+        ],
+        "correct": 2,
+        "explanation": "",
+        "recording": {
+          "audio": "https://api.dictionaryapi.dev/media/pronunciations/en/ship-us.mp3",
+          "sourceUrl": "https://commons.wikimedia.org/w/index.php?curid=720486",
+          "license": {
+            "name": "BY-SA 3.0",
+            "url": "https://creativecommons.org/licenses/by-sa/3.0"
+          }
+        }
+      },
+      {
+        "prompt": "Recording 6 · Which word do you hear?",
+        "options": [
+          "right",
+          "rate",
+          "light",
+          "late"
+        ],
+        "correct": 2,
+        "explanation": "",
+        "recording": {
+          "audio": "https://api.dictionaryapi.dev/media/pronunciations/en/light-uk.mp3",
+          "sourceUrl": "https://commons.wikimedia.org/w/index.php?curid=9023196",
+          "license": {
+            "name": "BY 3.0 US",
+            "url": "https://creativecommons.org/licenses/by/3.0/us"
+          }
+        }
+      }
+    ],
+    "passage": "Play each recording and choose the word you hear.",
+    "audio": null
+  }
+]

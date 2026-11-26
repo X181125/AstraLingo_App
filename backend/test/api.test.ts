@@ -228,3 +228,33 @@ test('SMTP failure gives the same public response and permits retry', async () =
   assert.equal(sends, 2);
   assert.ok(await db.passwordReset.findUnique({ where: { userId: user.id } }));
 });
+
+test('SAT section saves answers, grades both modules and restricts attempt access', async () => {
+  const catalog = (await request(app).get('/api/exams').expect(200)).body.data;
+  assert.equal(catalog.filter((item: { paper?: object }) => item.paper).length, 8);
+  const signUp = async (email: string) => {
+    const response = await request(app).post('/api/auth/register')
+      .send({name:'Exam tester', email, password:'ExamTester123!'}).expect(201);
+    return 'Bearer ' + response.body.data.token;
+  };
+  const owner = await signUp('sat-owner@example.test');
+  const otherAccount = await signUp('sat-other@example.test');
+  const begin = '/api/exams/sat-paper-9/start';
+  await request(app).post(begin).expect(401);
+  const attempt = (await request(app).post(begin).set('Authorization', owner).expect(200)).body.data;
+  assert.equal(attempt.questions.length, 66);
+  assert.ok(attempt.questions.every((question: { correct?: number }) => question.correct === undefined));
+  const path = '/api/exams/attempts/' + attempt.id;
+  await request(app).get(path).set('Authorization', otherAccount).expect(404);
+  const saved = (await request(app).put(path + '/answers').set('Authorization', owner)
+    .send({question:0, choice:0, revision:attempt.revision}).expect(200)).body.data;
+  await request(app).put(path + '/answers').set('Authorization', owner)
+    .send({question:33, choice:1, revision:saved.revision}).expect(200);
+  const resumed = (await request(app).post(begin).set('Authorization', owner).expect(200)).body.data;
+  assert.deepEqual([resumed.id, resumed.answers[0], resumed.answers[33]], [attempt.id, 0, 1]);
+  const result = (await request(app).post(path + '/submit').set('Authorization', owner).expect(200)).body.data;
+  assert.equal(result.correct, 2);
+  assert.equal(result.questions[33].correct, 1);
+  const history = (await request(app).get('/api/exams/history').set('Authorization', owner).expect(200)).body.data;
+  assert.equal(history[0].correct, 2);
+});

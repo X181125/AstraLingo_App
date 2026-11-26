@@ -1,3 +1,4 @@
+import { examRoutes } from './exams.js';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -57,6 +58,8 @@ export function createApp(db: PrismaClient, config: Config, sendReset: SendReset
     res.locals.user = user;
     next();
   }
+
+  app.use('/api/exams', examRoutes(db, authenticated));
 
   app.get('/api/health', async (_req, res) => {
     await db.$queryRaw`SELECT 1`;

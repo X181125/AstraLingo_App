@@ -176,3 +176,11 @@ Tests bao gồm validation, email trùng, đăng nhập sai, JWT, tìm kiếm/l�
 - [Prisma local PostgreSQL](https://www.prisma.io/docs/local-development/postgres)
 
 Các package được khóa bằng package-lock.json. Không nâng major Expo/Prisma tự động nếu chưa kiểm tra tương thích.
+
+## English practice
+
+Open **Học tập** to start Online Exam, Mini Quiz or review your attempts. Both modes use the existing AstraLingo account and database.
+
+- **Online Exam** includes Reading and Writing for [College Board paper practice tests 4 through 11](https://satsuite.collegeboard.org/practice/practice-tests/paper). Each has two modules, 66 questions and a 78-minute practice timer. Results are reported as a raw score.
+- **Mini Quiz** draws from [The Trivia API](https://thetriviaapi.com/) ([CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/)), [AI2 SciQ](https://huggingface.co/datasets/allenai/sciq) ([CC BY-NC 3.0](https://creativecommons.org/licenses/by-nc/3.0/)) and [Free Dictionary API](https://dictionaryapi.dev/). The listening screen links to the source and license of each recording. Saved sets cover service outages.
+- Apply the new Prisma migration when updating a deployment. Compose applies it through the migration service. Run the Python script scripts/refresh_sat_papers.py with pypdf installed to refresh the catalog against the official answer explanations, then rebuild the backend.

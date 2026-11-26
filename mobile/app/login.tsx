@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, View } from "react-native";
+import { Text } from "@/components/typography";
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { AndroidDownloadBanner } from '../components/AndroidDownloadBanner';
 import { AuthShell, Button, Field, Notice, s } from '../components/UI';

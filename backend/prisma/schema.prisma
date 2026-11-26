@@ -19,6 +19,7 @@ model User {
   createdAt    DateTime @default(now())
   reset        PasswordReset?
   enrollments  Enrollment[]
+  examAttempts ExamAttempt[]
 }
 
 model PasswordReset {
@@ -91,4 +92,21 @@ model Enrollment {
   course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   @@id([userId, courseId])
+}
+
+model ExamAttempt {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  examId      String
+  openKey     String?  @unique
+  snapshot    Json
+  answers     Int[]
+  revision    Int      @default(0)
+  startedAt   DateTime @default(now())
+  expiresAt   DateTime
+  submittedAt DateTime?
+  correct     Int?
+
+  @@index([userId, startedAt])
 }

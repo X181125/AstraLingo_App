@@ -25,6 +25,7 @@ ENV NODE_ENV=production
 COPY --from=production-deps --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
 COPY --from=build --chown=node:node /app/package.json ./package.json
+COPY --chown=node:node preview-media ./preview-media
 RUN mkdir -p /app/.local && chown node:node /app/.local
 USER node
 EXPOSE 4000
