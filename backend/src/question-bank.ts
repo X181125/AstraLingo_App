@@ -1,3 +1,4 @@
+import { trackAi } from './ai-audit.js';
 import { Router, type RequestHandler } from 'express';
 import { Prisma, type PrismaClient, type ContentItem, type LessonAssessment } from '@prisma/client';
 import { z } from 'zod';
@@ -245,7 +246,7 @@ export function questionBank(db: PrismaClient, config: Config, auth: RequestHand
             row = await get(single ? Math.floor(id / span) : id, res.locals.user.id, true);
           const prompt = single ? byQuestion(bankQuestions(row), id).questionText : row.lesson.preview;
           const generated = (
-            await generate(config, 'questions', prompt + '\n' + String(object(row.lesson.practice).body ?? ''))
+            await generate(trackAi(config, db, res.locals.user.id, 'assessment.questions.generate'), 'questions', prompt + '\n' + String(object(row.lesson.practice).body ?? ''))
           ).questions;
           const value = await edit(row, (rows, seq) => {
             const mapped = generated.map((q) => ({

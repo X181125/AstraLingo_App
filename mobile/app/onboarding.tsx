@@ -31,7 +31,7 @@ export default function Onboarding() {
   const action = useAction();
   const { page } = useLocalSearchParams<{ page?: string }>();
   const [step, setStep] = useState(page === 'done' ? 7 : page && /^[1-7]$/.test(page) ? Number(page) - 1 : 0);
-  const [nativeLang] = useState(auth.user?.nativeLang ?? 'vi');
+  const [nativeLang, setNativeLang] = useState(auth.user?.nativeLang ?? 'vi');
   const [goal, setGoal] = useState<(typeof goals)[number]>('study');
   const [level, setLevel] = useState(auth.user?.level ?? 'A1');
   const [ageGroup, setAgeGroup] = useState<(typeof ages)[number]>('18-24');
@@ -41,9 +41,18 @@ export default function Onboarding() {
     {
       title: 'Your learning language',
       options: (
-        <Panel>
-          <Copy>English ✓</Copy>
-        </Panel>
+        <>
+          <Panel>
+            <Copy>English ✓</Copy>
+          </Panel>
+          <Copy>Ngôn ngữ mẹ đẻ của bạn</Copy>
+          <SetupOptions
+            values={languages}
+            value={nativeLang}
+            label={(item) => languageName[item]}
+            onChange={setNativeLang}
+          />
+        </>
       ),
     },
     {

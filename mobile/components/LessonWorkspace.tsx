@@ -16,6 +16,7 @@ import {
 import { DiscoveryRow } from './DiscoveryUI';
 import { Button } from './UI';
 import { Listen } from './PracticeAudio';
+import { RelatedListening } from './RelatedListening';
 import { LanguageCoach } from './LanguageCoach';
 import { PracticeContent } from '@/app/practice/[id]';
 import { api } from '@/src/api';
@@ -94,6 +95,11 @@ export function LessonWorkspace({
         screen={screen}
         target={path[0] === 'assessments' ? (path[1] === 'edit' ? path[2] : path[1]) : (path[1] ?? attemptId)}
         assessmentId={path[1] === 'edit' ? 'edit' : assessmentId}
+        footer={
+          kind === 'listening' && ['progress', 'review', 'result'].includes(section) ? (
+            <RelatedListening id={lesson.publicId} />
+          ) : undefined
+        }
       />
     );
   }
@@ -134,6 +140,7 @@ export function LessonWorkspace({
               )}
             </Panel>
           </Section>
+          {kind === 'writing' && <LanguageCoach key={lesson.id} kind="writing" id={lesson.publicId} />}
           {kind === 'reading' ? (
             <>
               <Button label="Take Quiz" onPress={() => router.push(base + '/quiz')} />
@@ -151,6 +158,7 @@ export function LessonWorkspace({
               ))}
             </Section>
           )}
+          {kind === 'listening' && <RelatedListening id={lesson.publicId} />}
           {lesson.ownerId === user?.id && (
             <>
               <Button
@@ -205,13 +213,24 @@ function ManageTranscript({ lesson }: { lesson: Practice }) {
   const [lines, setLines] = useState(
     lesson.transcript.map((line) => line.second + ' | ' + line.text).join('\n'),
   );
+  const [savedLines, setSavedLines] = useState(lines);
+  const [confirmGenerate, setConfirmGenerate] = useState(false);
+  const capabilities = useFocusedData<{ gemini: boolean }>(
+    lesson.ownerId === user?.id ? '/learn/ai/capabilities' : null,
+  );
   return (
     <LearningScreen title="Manage Transcript" subtitle={lesson.title} back>
       {lesson.ownerId !== user?.id ? (
         <Copy>Only the lesson author can edit this transcript.</Copy>
       ) : (
         <>
-          <Input label="Timed segments (seconds | text)" multiline value={lines} onChangeText={setLines} />
+          <Input
+            label="Timed segments (seconds | text)"
+            multiline
+            value={lines}
+            onChangeText={setLines}
+            editable={!action.busy}
+          />
           <ActionNotice action={action} />
           <Button
             label="Save transcript"
@@ -241,10 +260,47 @@ function ManageTranscript({ lesson }: { lesson: Practice }) {
                       .sort((a, b) => a.second - b.second),
                   },
                 });
+                setSavedLines(lines);
                 action.setSuccess('Transcript saved.');
               })
             }
           />
+          {capabilities.data?.gemini && !!lesson.audioId && (
+            <Section title="Transcript bằng AI">
+              {lines !== savedLines && <Copy>Lưu thay đổi trước khi tạo lại transcript.</Copy>}
+              <Button
+                label={confirmGenerate ? 'Xác nhận tạo lại transcript' : 'Tạo transcript từ bản ghi'}
+                secondary
+                disabled={lines !== savedLines}
+                loading={action.busy}
+                onPress={() => {
+                  if (savedLines && !confirmGenerate) {
+                    setConfirmGenerate(true);
+                    return;
+                  }
+                  void action.run(async () => {
+                    const next = await api<{
+                      transcriptJson: { segments: { startSec: number; text: string }[] };
+                    }>(`/listening-audios/${lesson.publicId}/transcript/generate`, {
+                      method: 'POST',
+                      token,
+                      timeoutMs: 55_000,
+                    });
+                    const updated = next.transcriptJson.segments
+                      .map((line) => line.startSec + ' | ' + line.text)
+                      .join('\n');
+                    setLines(updated);
+                    setSavedLines(updated);
+                    setConfirmGenerate(false);
+                    action.setSuccess('Đã tạo và lưu transcript có mốc thời gian.');
+                  });
+                }}
+              />
+              {confirmGenerate && (
+                <Button label="Hủy tạo lại" secondary onPress={() => setConfirmGenerate(false)} />
+              )}
+            </Section>
+          )}
         </>
       )}
     </LearningScreen>

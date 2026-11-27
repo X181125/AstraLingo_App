@@ -1,3 +1,4 @@
+import { openApiDocument } from './openapi.js';
 import { questionBank } from './question-bank.js';
 import { speechReviewRoutes } from './speech-review.js';
 import { recordingRoutes } from './recordings.js';
@@ -51,7 +52,9 @@ export function createApp(db: PrismaClient, config: Config, sendReset: SendReset
   app.post('/api/study/lessons', authenticated, express.json({ limit: '128kb' }));
   app.put('/api/study/lessons/:id', authenticated, express.json({ limit: '128kb' }));
   app.post('/api/ai/visual-vocabulary', authenticated, express.json({limit:'6mb'}));
+  app.post('/api/writing-prompts/:id/ai/draft/:task', authenticated, express.json({ limit: '96kb' }));
   app.use(express.json({ limit: '32kb' }));
+  app.get('/api/openapi.json', (_req, res) => res.json(openApiDocument));
   const authLimit = rateLimit({ windowMs: 15 * 60_000, limit: 30, standardHeaders: 'draft-8', legacyHeaders: false,
     message: { error: { status: 429, message: 'Bạn thử quá nhiều lần. Vui lòng thử lại sau 15 phút.' } } });
   const resetLimit = rateLimit({ windowMs: 60 * 60_000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false,

@@ -1,3 +1,4 @@
+import { trackAi } from './ai-audit.js';
 import { ContentType, Prisma, type PrismaClient } from '@prisma/client';
 import { Router, type RequestHandler } from 'express';
 import { z } from 'zod';
@@ -271,7 +272,7 @@ export function submissionRoutes(db: PrismaClient, config: Config, auth: Request
           : undefined;
       if (mode === 'SPEAKING' && !media) throw new ApiError(400, 'Thiếu bản ghi âm.');
       const feedback = await generate(
-        config,
+        trackAi(config, db, res.locals.user.id, mode.toLowerCase() + '.feedback'),
         mode === 'WRITING' ? 'writing-feedback' : 'speaking-feedback',
         `Assignment: ${data.assignment ?? toPrompt(row.lesson).promptText}\nResponse: ${data.text ?? ''}`,
         media,

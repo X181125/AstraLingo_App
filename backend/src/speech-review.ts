@@ -1,3 +1,4 @@
+import { trackAi } from './ai-audit.js';
 import { Router, type RequestHandler } from 'express';
 import { Prisma, type PrismaClient, type SpeechSegment } from '@prisma/client';
 import { z } from 'zod';
@@ -159,8 +160,8 @@ export function speechReviewRoutes(db: PrismaClient, config: Config, auth: Reque
       const audio = await readAudio(db, config, audioId);
       const lines =
         kind === 'transcript'
-          ? (await generate(config, 'transcription', 'Transcribe this English recording.', audio)).segments
-          : (await generate(config, 'speech-notes', a.lesson.preview, audio)).segments;
+          ? (await generate(trackAi(config, db, res.locals.user.id, 'speaking.transcription'), 'transcription', 'Transcribe this English recording.', audio)).segments
+          : (await generate(trackAi(config, db, res.locals.user.id, 'speaking.notes'), 'speech-notes', a.lesson.preview, audio)).segments;
       const transcript =
         kind === 'transcript' ? lines.map((x) => ('text' in x ? x.text : '')).join(' ') : undefined;
       const stored = await db.$transaction(async (tx) => {

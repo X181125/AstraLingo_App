@@ -1,3 +1,4 @@
+import { trackAi } from './ai-audit.js';
 import { Router, type RequestHandler } from 'express';
 import { ContentStatus, ContentType, Prisma, type PrismaClient } from '@prisma/client';
 import { z } from 'zod';
@@ -369,7 +370,7 @@ export function studyRouter(db: PrismaClient, config: Config, auth: RequestHandl
     const assignment = response.assignment ?? `${attempt.lesson.title}\n${readPractice(attempt.lesson.practice).body}`;
     const prompt = `Assignment: ${assignment}\nStudent response: ${response.text}`;
     const media = response.audioId ? await readAudio(db, config, response.audioId) : undefined;
-    const result = await generate(config, attempt.mode === 'SPEAKING' ? 'speaking-feedback' : 'writing-feedback', prompt, media);
+    const result = await generate(trackAi(config, db, userId, attempt.mode.toLowerCase() + '.feedback'), attempt.mode === 'SPEAKING' ? 'speaking-feedback' : 'writing-feedback', prompt, media);
     const changed = await db.studyAttempt.updateMany({ where: { id: attemptId, userId, state: 'SUBMITTED' },
       data: { feedback: result, score: result.score, state: 'COMPLETED', completedAt: new Date() } });
     if (!changed.count) throw new ApiError(409, 'Bài đã được chấm. Tải lại lịch sử để xem kết quả.');

@@ -1,3 +1,4 @@
+import { trackAi } from './ai-audit.js';
 import { searchWords } from "./dictionary.js";
 import { Router, type RequestHandler } from 'express';
 import type { PrismaClient } from '@prisma/client';
@@ -57,12 +58,13 @@ export function vocabularyRouter(db: PrismaClient, config: Config, auth: Request
       z.object({ task: z.enum(['explain', 'outline', 'flashcards', 'questions', 'listening-guide', 'writing-revision']), text }),
       z.object({ task: z.literal('image-vocabulary'), mimeType: z.literal('image/jpeg'), data: z.base64().min(16).max(4_194_304) }),
     ]).parse(req.body);
+    const scoped = trackAi(config, db, res.locals.user.id, 'learn.' + input.task);
     if (input.task === 'image-vocabulary') {
       const bytes = Buffer.from(input.data, 'base64');
       if (bytes.subarray(0, 3).toString('hex') !== 'ffd8ff') throw new ApiError(400, 'Ảnh JPEG không hợp lệ.');
-      return ok(res, await generate(config, input.task, 'Extract useful vocabulary from this image.', { mimeType: input.mimeType, data: input.data }));
+      return ok(res, await generate(scoped, input.task, 'Extract useful vocabulary from this image.', { mimeType: input.mimeType, data: input.data }));
     }
-    return ok(res, await generate(config, input.task, input.text));
+    return ok(res, await generate(scoped, input.task, input.text));
   });
   router.get('/decks', async (req, res) => {
     const userId = res.locals.user.id as string;

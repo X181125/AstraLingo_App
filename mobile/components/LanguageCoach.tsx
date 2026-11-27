@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ActionNotice, Choice, Copy, Panel, Section, useAction } from './Learning';
+import { ActionNotice, Choice, Copy, Panel, Section, Pending, useAction, useFocusedData } from './Learning';
 import { Button } from './UI';
 import { api } from '../src/api';
 import { useAuth } from '../src/auth';
@@ -30,6 +30,7 @@ const listening = [
   ['post-listening/generate', 'Sau khi nghe'],
 ] as const;
 export function LanguageCoach({ kind, id }: { kind: 'listening' | 'writing'; id: number }) {
+  const availability = useFocusedData<{ gemini: boolean }>('/learn/ai/capabilities');
   const options = kind === 'writing' ? writing : listening;
   const { token } = useAuth();
   const [selected, setSelected] = useState<string>(options[0][0]);
@@ -37,6 +38,10 @@ export function LanguageCoach({ kind, id }: { kind: 'listening' | 'writing'; id:
   const action = useAction();
   return (
     <Section title={kind === 'writing' ? 'Trợ lý viết' : 'Trợ lý nghe'}>
+      <Pending {...availability} />
+      {availability.data && !availability.data.gemini && (
+        <Copy>Máy chủ chưa cấu hình Gemini. Bạn vẫn có thể làm bài và lưu bản nháp.</Copy>
+      )}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         {options.map(([key, label]) => (
           <Choice key={key} label={label} selected={selected === key} onPress={() => setSelected(key)} />
@@ -46,10 +51,12 @@ export function LanguageCoach({ kind, id }: { kind: 'listening' | 'writing'; id:
       <Button
         label="Nhận hướng dẫn"
         loading={action.busy}
+        disabled={!availability.data?.gemini}
         icon="sparkles-outline"
         onPress={() =>
           void action.run(async () => {
-            const base = kind === 'writing' ? '/writing-prompts/' + id + '/ai/' : '/listening-audios/' + id + '/';
+            const base =
+              kind === 'writing' ? '/writing-prompts/' + id + '/ai/' : '/listening-audios/' + id + '/';
             const result = await api<{ text: string }>(base + selected, {
               token,
               method: 'POST',

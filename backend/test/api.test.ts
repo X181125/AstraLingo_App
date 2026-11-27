@@ -493,3 +493,103 @@ test('media, authoring and vocabulary resources enforce ownership and preserve g
   await api.post('/api/speaking-attempts/'+a.id+'/submit').set(me).send({}).expect(200);
   await api.delete(clip).set(me).expect(409);
 });
+
+test('related Listening lessons prefer same course and exclude private, draft and current lessons', async () => {
+  const session = await request(app).post('/api/auth/register')
+    .send({ name: 'Listening audit', email: 'related-listening@example.test', password: 'Valid@12345' }).expect(201);
+  const authorization = 'Bearer ' + session.body.data.token;
+  const owner = await db.user.findUniqueOrThrow({ where: { email: 'second@example.com' } });
+  const source = await db.contentItem.findUniqueOrThrow({ where: { id: 'english-first-steps-2' } });
+  const listening = { courseId: source.courseId, contentType: 'LISTENING' as const, preview: 'Listen closely.', minutes: 4,
+    practice: { body: 'Listen closely.', transcript: [], questions: [] }, order: 0 };
+  const rows = await Promise.all([
+    db.contentItem.create({ data: { ...listening, id: 'listening-test-public', title: 'A published match', ownerId: owner.id, status: 'PUBLISHED', isPublic: true } }),
+    db.contentItem.create({ data: { ...listening, id: 'listening-test-private', title: 'Someone else’s private lesson', ownerId: owner.id, status: 'PUBLISHED', isPublic: false } }),
+    db.contentItem.create({ data: { ...listening, id: 'listening-test-draft', title: 'Your draft', ownerId: session.body.data.user.id, status: 'DRAFT' } }),
+  ]);
+  try {
+    const url = `/api/listening-audios/${source.publicId}/related`;
+    await request(app).get(url).expect(401);
+    const { body } = await request(app).get(url + '?limit=30').set('Authorization', authorization).expect(200);
+    const items: { id: number; reason: string }[] = body.data.items;
+    assert.equal(items[0].id, rows[0].publicId);
+    assert.equal(items[0].reason, 'SAME_COURSE');
+    assert.equal(items.length, new Set(items.map(item => item.id)).size);
+    assert.ok(!items.some(item => [source.publicId, rows[1].publicId, rows[2].publicId].includes(item.id)));
+    const limited = await request(app).get(url + '?limit=1').set('Authorization', authorization).expect(200);
+    assert.equal(limited.body.data.items.length, 1);
+  } finally {
+    await db.contentItem.deleteMany({ where: { id: { in: rows.map(row => row.id) } } });
+  }
+});
+
+test('Writing AI validates and protects drafts, audits provider results, and exposes OpenAPI', async (t) => {
+  const session = await request(app).post('/api/auth/register')
+    .send({ name: 'Writing audit', email: 'writing-audit@example.test', password: 'Valid@12345' }).expect(201);
+  const authorization = 'Bearer ' + session.body.data.token;
+  const lesson = await db.contentItem.findUniqueOrThrow({ where: { id: 'english-first-steps-4' } });
+  const url = `/api/writing-prompts/${lesson.publicId}/ai`;
+  await request(app).post(url + '/draft/grammar-check').send({ text: 'A sentence.' }).expect(401);
+  await request(app).post(url + '/draft/coach-chat').set('Authorization', authorization).send({ text: 'A sentence.' }).expect(400);
+  await request(app).post(url + '/draft/grammar-check').set('Authorization', authorization).send({ text: 'A sentence.' }).expect(503);
+  const document = await request(app).get('/api/openapi.json').expect(200);
+  assert.equal(document.body.openapi, '3.1.0');
+  assert.ok(document.body.paths['/listening-audios/{publicId}/related'].get.responses['200']);
+  assert.ok(document.body.paths['/writing-prompts/{publicId}/ai/draft/{draftTask}'].post.requestBody.required);
+  const aiApp = createApp(db, { ...testConfig(), GEMINI_API_KEY: 'fixture-only', GEMINI_MODEL: 'fixture-model' }, async () => {});
+  let providerCalls = 0;
+  const realFetch = globalThis.fetch;
+  t.mock.method(globalThis, 'fetch', async (input: string, init?: RequestInit) => {
+    if (!String(input).startsWith('https://generativelanguage.googleapis.com/')) return realFetch(input, init);
+    providerCalls++;
+    const payload = JSON.parse(String(init?.body));
+    const instruction = payload.systemInstruction.parts[0].text as string;
+    const promptText = payload.contents[0].parts[0].text as string;
+    if (providerCalls === 3) return new Response('{}', { status: 429 });
+    let result: Record<string, unknown> = { text: 'Fixture feedback.' };
+    if (instruction.startsWith('Grade the essay')) {
+      assert.ok(promptText.includes('I read every day.'));
+      result = { score: 80, strengths: ['Clear idea'], improvements: [], criteria: [], segments: [] };
+    } else if (instruction.startsWith('Assess this English writing sample for band-estimate')) {
+      result = { overallBand: 6.5, cefrLevel: 'B2', confidence: 'medium', rationale: 'Fixture band rationale.' };
+    } else {
+      assert.ok(JSON.parse(promptText).activity);
+    }
+    return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify(result) }] } }] });
+  });
+  const other = await db.user.findUniqueOrThrow({ where: { email: 'second@example.com' } });
+  const privateLesson = await db.contentItem.create({ data: { id: 'writing-test-draft', contentType: 'WRITING', courseId: lesson.courseId,
+    ownerId: other.id, status: 'DRAFT', title: 'Private prompt', preview: 'A private prompt.', minutes: 3, order: 0 } });
+  try {
+    await request(aiApp).post(`/api/writing-prompts/${privateLesson.publicId}/ai/draft/grammar-check`)
+      .set('Authorization', authorization).send({ text: 'A sentence.' }).expect(404);
+    const guide = await request(aiApp).post(url + '/outline').set('Authorization', authorization).send({}).expect(200);
+    assert.equal(guide.body.data.text, 'Fixture feedback.');
+    await request(aiApp).post(url + '/draft/coach-chat').set('Authorization', authorization)
+      .send({ text: 'A sentence.', context: 'Can you suggest a transition?' }).expect(200);
+    await request(aiApp).post(url + '/draft/grammar-check').set('Authorization', authorization)
+      .send({ text: 'A sentence.' }).expect(502);
+    const submission = await request(aiApp).post(`/api/study/lessons/${lesson.id}/submission`)
+      .set('Authorization', authorization).send({ text: 'I read every day.', submit: true }).expect(201);
+    const graded = await request(aiApp).post('/api/study/attempts/' + submission.body.data.id + '/feedback')
+      .set('Authorization', authorization).expect(200);
+    assert.equal(graded.body.data.state, 'COMPLETED');
+    assert.equal((await db.studyAttempt.findUniqueOrThrow({ where: { id: graded.body.data.id } })).score, 80);
+    const analysisUrl = '/api/writing-submissions/' + graded.body.data.publicId + '/ai/band-estimate';
+    for (let i = 0; i < 2; i++) {
+      const result = await request(aiApp).get(analysisUrl).set('Authorization', authorization).expect(200);
+      assert.equal(result.body.data.overallBand, 6.5);
+    }
+    assert.equal(providerCalls, 5);
+    const logs = await db.aiRequest.findMany({ where: { userId: session.body.data.user.id } });
+    const outcomes = Object.fromEntries(logs.map(entry => [entry.feature, entry.outcome]));
+    assert.deepEqual(outcomes, {
+      'writing.outline': 'SUCCEEDED', 'writing.draft.coach-chat': 'SUCCEEDED', 'writing.draft.grammar-check': 'PROVIDER_ERROR',
+      'writing.feedback': 'SUCCEEDED', 'writing.analysis.band-estimate': 'SUCCEEDED',
+    });
+    assert.ok(logs.every(entry => entry.model === 'fixture-model' && entry.durationMs >= 0));
+    assert.ok(!JSON.stringify(logs).includes('A sentence.'));
+  } finally {
+    await db.contentItem.delete({ where: { id: privateLesson.id } });
+  }
+});

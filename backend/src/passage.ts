@@ -116,12 +116,40 @@ export function passageRoutes(db: PrismaClient, auth: RequestHandler) {
     router.get([base + '/related', base + '/recommended'], auth, async (req, res) => {
       const userId = res.locals.user.id,
         row = await getLesson(req.params.id, userId);
-      const rows = await db.contentItem.findMany({
-        where: { ...visible(userId), id: { not: row.id } },
-        orderBy: [{ order: 'asc' }, { id: 'asc' }],
-        take: key.max(30).default(5).parse(req.query.limit),
-      });
-      ok(res, { items: rows.map(detail), basePrompt: detail(row) });
+      const limit = key.max(30).default(5).parse(req.query.limit);
+      const where = { ...visible(userId), id: { not: row.id } };
+      if (skill !== 'listening') {
+        const rows = await db.contentItem.findMany({
+          where,
+          orderBy: [{ order: 'asc' }, { id: 'asc' }],
+          take: limit,
+        });
+        return ok(res, { items: rows.map(detail), basePrompt: detail(row) });
+      }
+
+      const published = { ...where, status: 'PUBLISHED' as const };
+      const orderBy = [{ order: 'asc' as const }, { id: 'asc' as const }];
+      const level = row.levelCode ?? row.estimatedCefr;
+      const items: (ReturnType<typeof detail> & { reason: string })[] = [];
+      const groups: { filter: Prisma.ContentItemWhereInput; reason: string }[] = [
+        { filter: { courseId: row.courseId }, reason: 'SAME_COURSE' },
+        ...(level ? [{ filter: { OR: [{ levelCode: level }, { estimatedCefr: level }] }, reason: 'SAME_LEVEL' }] : []),
+        { filter: {}, reason: 'MORE_LISTENING' },
+      ];
+      const seen = [row.id];
+      for (const { filter, reason } of groups) {
+        if (items.length === limit) break;
+        const matches = await db.contentItem.findMany({
+          where: { ...published, AND: [filter], id: { notIn: seen } },
+          orderBy,
+          take: limit - items.length,
+        });
+        for (const match of matches) {
+          seen.push(match.id);
+          items.push({ ...detail(match), reason });
+        }
+      }
+      ok(res, { items, basePrompt: detail(row) });
     });
     router.get(
       [

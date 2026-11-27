@@ -22,8 +22,8 @@ Mở [AstraLingo trên máy](http://localhost:8080), đăng ký rồi chọn m�
 | Tài khoản | Đăng ký, đăng nhập, đổi mật khẩu bằng mã email, khôi phục và làm mới phiên. Thiết lập mục tiêu, trình độ, giao diện và thời lượng học. |
 | Home | Tìm kiếm, lọc theo kỹ năng và trình độ, mở chi tiết khóa, ghi danh rồi vào bài luyện. Mục Top Mentor dùng nhân vật minh họa để dẫn tới khóa học theo kỹ năng. |
 | Học tập | Khám phá bài công khai, tạo và sửa bài cá nhân, soạn câu hỏi, xuất bản, sao chép và báo cáo. Tác giả có thể tạo nhiều bộ câu hỏi đọc/nghe, chọn bộ đang dùng và giữ lịch sử riêng cho từng lượt. |
-| Reading và Listening | Đọc đoạn văn hoặc nghe audio, mở transcript, nghe chậm, đánh dấu, lưu từ, trả lời câu hỏi và xem giải thích. Năm bài nghe mẫu có sẵn audio và mốc thời gian. Bài tự soạn chỉ có transcript có thể dùng giọng đọc trên thiết bị. |
-| Speaking và Writing | Ghi và nghe lại bài nói, soạn bài viết, lưu nháp, nộp bài và xem lịch sử. Bật Gemini để nhận góp ý theo tiêu chí. |
+| Reading và Listening | Đọc đoạn văn hoặc nghe audio, mở transcript, nghe chậm, đánh dấu, lưu từ, trả lời câu hỏi và xem giải thích. Có gợi ý bài nghe theo khóa và trình độ. Năm bài nghe mẫu có sẵn audio và mốc thời gian. Bài tự soạn chỉ có transcript có thể dùng giọng đọc trên thiết bị. |
+| Speaking và Writing | Ghi và nghe lại bài nói, soạn bài viết, lưu nháp, nộp bài và xem lịch sử. Bật Gemini để chuẩn bị bài viết, góp ý bản nháp, phân tích kết quả và sinh bài luyện hoặc thẻ từ bài viết. |
 | Online Exam | Tám đề luyện SAT Reading and Writing số 4–11, mỗi đề 66 câu và hai module. Làm bài theo đồng hồ, lưu lựa chọn và xem số câu đúng cùng lịch sử. Điểm hiển thị là điểm thô. Mở đề gốc của College Board cần mạng. |
 | Mini Quiz | Chọn chủ đề để bắt đầu, trả lời, nộp và xem điểm. Bộ câu hỏi và audio dự phòng đi cùng repo để dùng khi nhà cung cấp tạm ngừng. |
 | Dictionary | Tra và duyệt từ tiếng Anh, xem nghĩa, ví dụ nếu có và lưu vào danh sách cá nhân. WordNet 3.0 cung cấp 147.306 mục tiếng Anh đã chuẩn hóa với nghĩa tiếng Anh. Một số mục phổ biến có nghĩa tiếng Việt. |
@@ -38,6 +38,11 @@ Mở [AstraLingo trên máy](http://localhost:8080), đăng ký rồi chọn m�
 - Áp dụng thay đổi biến môi trường bằng `docker compose up -d`. Khi đưa lên máy chủ, dùng HTTPS và đặt đúng origin của frontend.
 
 ### API
+
+API phục vụ [tài liệu OpenAPI](http://localhost:8080/api/openapi.json) cho các luồng chính. Có thể nhập tệp JSON này vào Swagger Editor hoặc Postman. Đổi địa chỉ theo cổng đang chạy, ví dụ [bản 18087](http://localhost:18087/api/openapi.json).
+
+Bảng `AiRequest` lưu tài khoản, tên tính năng, tên mô hình, trạng thái và thời lượng của mỗi lượt gọi Gemini. Nội dung đề, bài viết, ảnh, bản ghi, khóa API và phản hồi toàn văn không được sao chép vào bảng này. Phản hồi chấm bài vẫn lưu cùng bài nộp. Khi xóa tài khoản, cơ sở dữ liệu xóa luôn nhật ký gắn với tài khoản đó.
+
 
 Danh sách 309 cặp phương thức và đường dẫn của bản tham chiếu nằm trong [mobile-routes.json](backend/test/mobile-routes.json). Bộ kiểm thử kiểm tra việc đăng ký đường dẫn và kiểm tra dữ liệu, quyền truy cập, lưu bài và chấm điểm trên các luồng tiêu biểu. Xem [backend/test/api.test.ts](backend/test/api.test.ts). Các nhóm API gồm `/api/auth`, `/api/account`, `/api/courses`, `/api/study`, `/api/learn` và `/api/exams`. API tài nguyên cho ứng dụng di động còn có `/api/users/me`, `/api/user-levels`, `/api/content-categories`, `/api/content-items`, `/api/words`, `/api/flashcard-decks`, `/api/flashcards` và `/api/flashcard-progress`. Các bộ đánh giá, bản nháp và trợ lý kỹ năng được phục vụ qua `/api/reading-passages`, `/api/listening-audios`, `/api/speaking-prompts`, `/api/writing-prompts` cùng các tài nguyên lượt làm/bài nộp tương ứng. API yêu cầu phiên nhận JWT bằng header `Authorization: Bearer <token>`. Kiểm tra kết nối database tại [API health](http://localhost:8080/api/health).
 

@@ -48,12 +48,14 @@ export function AssessmentWorkspace({
   screen,
   target,
   assessmentId,
+  footer,
 }: {
   id: string;
   kind: string;
   screen?: string;
   target?: string;
   assessmentId?: string;
+  footer?: React.ReactNode;
 }) {
   const c = useAppColors();
   const { token, user } = useAuth();
@@ -172,6 +174,9 @@ export function AssessmentWorkspace({
                   {Object.keys(choices).length} / {run.questions.length} answered
                 </Copy>
               </Panel>
+            )}
+            {result && group === 'listening' && capabilities.data?.gemini && (
+              <ListeningAnalysis key={run.id} attemptId={run.id} />
             )}
             {run.questions.map((q) => (
               <Panel key={q.id}>
@@ -421,6 +426,7 @@ export function AssessmentWorkspace({
           )}
         </>
       )}
+      {footer}
     </LearningScreen>
   );
 }
@@ -529,5 +535,32 @@ function SetDetail({
         />
       )}
     </LearningScreen>
+  );
+}
+
+function ListeningAnalysis({ attemptId }: { attemptId: number }) {
+  const { token } = useAuth();
+  const action = useAction();
+  const [feedback, setFeedback] = useState('');
+  return (
+    <Panel>
+      <Button
+        label="Phân tích điểm yếu bài nghe"
+        secondary
+        loading={action.busy}
+        onPress={() =>
+          void action.run(async () => {
+            const result = await api<{ text: string }>(`/listening-attempts/${attemptId}/weakness-analysis`, {
+              method: 'POST',
+              token,
+              timeoutMs: 55_000,
+            });
+            setFeedback(result.text);
+          })
+        }
+      />
+      <ActionNotice action={action} />
+      {!!feedback && <Copy selectable>{feedback}</Copy>}
+    </Panel>
   );
 }

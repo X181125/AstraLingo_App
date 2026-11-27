@@ -1,3 +1,4 @@
+import { trackAi } from './ai-audit.js';
 import { bankQuestions } from './question-bank.js';
 import { Router, type RequestHandler } from 'express';
 import { Prisma, type ContentItem, type LessonAssessment, type PrismaClient } from '@prisma/client';
@@ -144,7 +145,7 @@ export function assessmentRoutes(db: PrismaClient, config: Config, auth: Request
           ? {
               title: item.title,
               questions: (
-                await generate(config, 'questions', String(object(item.practice).body ?? item.preview))
+                await generate(trackAi(config, db, res.locals.user.id, kind + '.assessment.generate'), 'questions', String(object(item.practice).body ?? item.preview))
               ).questions.map(convert),
             }
           : kind === 'listening' && !req.body?.questions
@@ -381,7 +382,7 @@ export function assessmentRoutes(db: PrismaClient, config: Config, auth: Request
           return ok(res, { attemptId: run.id, recommendations: list });
         }
         const analysis = await generate(
-          config,
+          trackAi(config, db, res.locals.user.id, kind + (req.path.endsWith('/weakness-analysis') ? '.weakness-analysis' : '.feedback')),
           'tutor',
           JSON.stringify({
             activity: 'Explain missed questions and give a study plan.',

@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { ApiError } from './http.js';
-import type { Config } from './config.js';
+import { auditGeneration, type GenerationConfig } from './ai-audit.js';
 
 export const question = z
   .object({
@@ -40,7 +40,7 @@ const analyses={
 };
 export type WritingAnalysis=keyof typeof analyses;
 export const writingAnalyses=Object.keys(analyses) as WritingAnalysis[];
-export async function analyzeWriting(config:Config,aspect:WritingAnalysis,assignment:string,text:string) {
+export async function analyzeWriting(config:GenerationConfig,aspect:WritingAnalysis,assignment:string,text:string) {
   const schema=analyses[aspect];
   const instruction='Assess this English writing sample for '+aspect+'. Give specific feedback in Vietnamese with English examples. Use this JSON schema: '+JSON.stringify(z.toJSONSchema(schema));
   return await requestGeneration(config,instruction,schema,JSON.stringify({assignment,text}));
@@ -131,7 +131,7 @@ type Task = keyof typeof tasks;
 export type Media = { mimeType: string; data: string };
 
 export async function generate<K extends Task>(
-  config: Config,
+  config: GenerationConfig,
   task: K,
   text: string,
   media?: Media,
@@ -140,12 +140,14 @@ export async function generate<K extends Task>(
   return await requestGeneration(config,definition.prompt,definition.schema,text,media) as z.infer<(typeof tasks)[K]['schema']>;
 }
 
-async function requestGeneration<S extends z.ZodType>(config:Config,prompt:string,schema:S,text:string,media?:Media):Promise<z.infer<S>> {
+async function requestGeneration<S extends z.ZodType>(config:GenerationConfig,prompt:string,schema:S,text:string,media?:Media):Promise<z.infer<S>> {
   if (!config.GEMINI_API_KEY) throw new ApiError(503, 'Máy chủ chưa cấu hình Gemini.');
+  const model = config.GEMINI_MODEL || 'gemini-3.6-flash';
+  const started = Date.now();
+  let outcome: 'SUCCEEDED' | 'PROVIDER_ERROR' = 'PROVIDER_ERROR';
   try {
-    const model = encodeURIComponent(config.GEMINI_MODEL || 'gemini-3.6-flash');
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': config.GEMINI_API_KEY },
@@ -174,13 +176,17 @@ async function requestGeneration<S extends z.ZodType>(config:Config,prompt:strin
       .map((part) => part.text ?? '')
       .join('');
     if (!json) throw new Error('Missing content');
-    return schema.parse(JSON.parse(json));
+    const result = schema.parse(JSON.parse(json));
+    outcome = 'SUCCEEDED';
+    return result;
   } catch {
     throw new ApiError(502, 'Gemini chưa trả được kết quả hợp lệ. Thử lại sau.');
+  } finally {
+    await config[auditGeneration]?.({ model, outcome, durationMs: Math.max(0, Date.now() - started) });
   }
 }
 
-export function privateBucket(config: Config) {
+export function privateBucket(config: GenerationConfig) {
   if (!config.SUPABASE_URL || !config.SUPABASE_SERVICE_ROLE_KEY) return null;
   return createClient(config.SUPABASE_URL, config.SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },

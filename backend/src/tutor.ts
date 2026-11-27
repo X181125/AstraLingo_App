@@ -1,3 +1,4 @@
+import { trackAi } from './ai-audit.js';
 import { readAudio } from './study.js';
 import { Router, type RequestHandler } from 'express';
 import { Prisma, type PrismaClient } from '@prisma/client';
@@ -58,11 +59,30 @@ export function tutorRoutes(db: PrismaClient, config: Config, auth: RequestHandl
   router.use('/ai', auth, limit);
   router.post(['/ai/explain', '/ai/translate', '/ai/explain-sentence'], async (req, res) => {
     const value = term.parse(req.body?.word ?? req.body?.sentence ?? req.body?.text);
-    if (req.path.endsWith('/explain-sentence')) return ok(res, await generate(config, 'explain', value));
-    const word = await generate(config, 'lexicon', value);
+    if (req.path.endsWith('/explain-sentence'))
+      return ok(
+        res,
+        await generate(
+          trackAi(config, db, res.locals.user.id, 'dictionary.explain-sentence'),
+          'explain',
+          value,
+        ),
+      );
+    const word = await generate(
+      trackAi(
+        config,
+        db,
+        res.locals.user.id,
+        req.path.endsWith('/translate') ? 'dictionary.translate' : 'dictionary.explain',
+      ),
+      'lexicon',
+      value,
+    );
     ok(
       res,
-      req.path.endsWith('/translate') ? { original: value, translated: word.translation, nativeLang: 'vi' } : word,
+      req.path.endsWith('/translate')
+        ? { original: value, translated: word.translation, nativeLang: 'vi' }
+        : word,
     );
   });
   router.post('/ai/visual-vocabulary', async (req, res) => {
@@ -76,10 +96,15 @@ export function tutorRoutes(db: PrismaClient, config: Config, auth: RequestHandl
       Buffer.from(img, 'base64').subarray(0, 3).toString('hex') !== 'ffd8ff'
     )
       throw new ApiError(400, 'Cần ảnh JPEG hợp lệ.');
-    const result = await generate(config, 'image-vocabulary', 'Identify English vocabulary in this photo.', {
-      mimeType: 'image/jpeg',
-      data: img,
-    });
+    const result = await generate(
+      trackAi(config, db, res.locals.user.id, 'dictionary.visual-vocabulary'),
+      'image-vocabulary',
+      'Identify English vocabulary in this photo.',
+      {
+        mimeType: 'image/jpeg',
+        data: img,
+      },
+    );
     ok(res, { items: result.words.map((w) => ({ word: w.front, definition: w.back, languageCode: 'en' })) });
   });
   router.post('/ai/generate-flashcards', async (req, res) => {
@@ -103,12 +128,16 @@ export function tutorRoutes(db: PrismaClient, config: Config, auth: RequestHandl
       ? await db.deck.findFirst({ where: { publicId: input.deckId, ownerId: userId } })
       : null;
     if (input.deckId && !sourceDeck) throw new ApiError(404, 'Không tìm thấy bộ thẻ.');
-    const cards = (await generate(config, 'flashcards', `Generate ${input.count} cards.\n${source}`)).cards.slice(
-      0,
-      input.count,
-    );
+    const cards = (
+      await generate(
+        trackAi(config, db, userId, 'flashcards.generate'),
+        'flashcards',
+        `Generate ${input.count} cards.\n${source}`,
+      )
+    ).cards.slice(0, input.count);
     const items = cards.map((c) => ({ word: c.front, translation: c.back, definition: c.back }));
-    if (!input.saveToDeck) return ok(res, { deckId: null, created: 0, skipped: 0, skippedReasons: [], items });
+    if (!input.saveToDeck)
+      return ok(res, { deckId: null, created: 0, skipped: 0, skippedReasons: [], items });
     const saved = await db.$transaction(async (tx) => {
       const deck =
         sourceDeck ??
@@ -169,7 +198,7 @@ export function tutorRoutes(db: PrismaClient, config: Config, auth: RequestHandl
         ok(
           res,
           await generate(
-            config,
+            trackAi(config, db, res.locals.user.id, skill.toLowerCase() + '.' + name),
             'tutor',
             JSON.stringify({
               activity: instruction,
@@ -181,6 +210,42 @@ export function tutorRoutes(db: PrismaClient, config: Config, auth: RequestHandl
       });
     }
   }
+  router.post('/writing-prompts/:id/ai/draft/:task', auth, limit, async (req, res) => {
+    const task = z.enum(Object.keys(revision)).parse(req.params.task);
+    const input = z
+      .object({
+        text: z.string().trim().min(1).max(15000),
+        context: z.string().trim().max(1500).optional(),
+      })
+      .parse(req.body);
+    if (['coach-chat', 'change-tone'].includes(task) && !input.context) {
+      throw new ApiError(400, 'Hãy nhập câu hỏi hoặc giọng văn mong muốn.');
+    }
+
+    const prompt = await db.contentItem.findFirst({
+      where: {
+        publicId: key.parse(req.params.id),
+        contentType: 'WRITING',
+        course: { language: 'en' },
+        OR: [
+          { ownerId: res.locals.user.id },
+          { status: 'PUBLISHED', OR: [{ isPublic: true }, { ownerId: null }] },
+        ],
+      },
+    });
+    if (!prompt) throw new ApiError(404, 'Không tìm thấy đề viết.');
+    const result = await generate(
+      trackAi(config, db, res.locals.user.id, 'writing.draft.' + task),
+      'tutor',
+      JSON.stringify({
+        activity: revision[task],
+        assignment: object(prompt.practice).body ?? prompt.preview,
+        draft: input.text,
+        learnerOptions: input.context,
+      }),
+    );
+    ok(res, result);
+  });
   for (const [name, instruction] of Object.entries({
     ...revision,
     'generate-practice': 'Generate a quiz using the learner’s draft.',
@@ -199,7 +264,7 @@ export function tutorRoutes(db: PrismaClient, config: Config, auth: RequestHandl
       ok(
         res,
         await generate(
-          config,
+          trackAi(config, db, res.locals.user.id, 'writing.submission.' + name),
           task,
           JSON.stringify({
             activity: instruction,
@@ -242,7 +307,7 @@ export function tutorRoutes(db: PrismaClient, config: Config, auth: RequestHandl
           throw new ApiError(409, 'Hãy tải tệp âm thanh của bài lên trước khi tạo mốc thời gian.');
         const audio = await readAudio(db, config, practice.audioId);
         const output = await generate(
-          config,
+          trackAi(config, db, res.locals.user.id, 'listening.transcription'),
           'transcription',
           'Return a time-aligned transcript using up to 80 segments.',
           audio,
@@ -290,14 +355,16 @@ export function tutorRoutes(db: PrismaClient, config: Config, auth: RequestHandl
       let analysis = object(previous.analyses ?? null)[aspect];
       if (!analysis) {
         analysis = await analyzeWriting(
-          config,
+          trackAi(config, db, res.locals.user.id, 'writing.analysis.' + aspect),
           aspect,
           String(input.assignment ?? row.lesson.preview),
           String(input.text ?? ''),
         );
         await db.$transaction(async (tx) => {
           await tx.$queryRaw`SELECT id FROM "StudyAttempt" WHERE id=${row.id} FOR UPDATE`;
-          const current = object((await tx.studyAttempt.findUniqueOrThrow({ where: { id: row.id } })).feedback);
+          const current = object(
+            (await tx.studyAttempt.findUniqueOrThrow({ where: { id: row.id } })).feedback,
+          );
           await tx.studyAttempt.update({
             where: { id: row.id },
             data: {

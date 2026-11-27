@@ -37,6 +37,7 @@ model User {
   studyDays    StudyDay[]
   quizzes      QuizAttempt[]
   assessmentRuns AssessmentRun[]
+  aiRequests   AiRequest[]
 }
 
 model PasswordReset {
@@ -378,4 +379,18 @@ model SpeechSegment {
   sequence Int
   data Json
   @@index([attemptId,kind])
+}
+
+model AiRequest {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  feature     String
+  model       String
+  outcome     String
+  durationMs  Int
+  createdAt   DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([feature, createdAt])
 }

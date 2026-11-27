@@ -210,6 +210,137 @@ async function verifyNavigation() {
   }
 }
 
+async function verifyWritingAndListeningTools() {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  try {
+    const page = await context.newPage();
+    await register(page);
+    await page.goto(new URL('/study/content/listening/english-first-steps-2', base).href);
+    const related = page.waitForResponse(
+      (response) => /\/listening-audios\/\d+\/related\?/.test(response.url()) && response.ok(),
+    );
+    // Reload after installing the response listener so faster local runs are also covered.
+    await page.reload();
+    const list = (await (await related).json()).data.items;
+    assert.ok(list.length > 0);
+    await page.getByRole('heading', { name: 'Bài nghe gợi ý', exact: true }).waitFor();
+    await button(page, list[0].contentItem.title).click();
+    await page.waitForURL(`**/study/content/listening/${list[0].id}`);
+    await page.getByRole('heading', { name: list[0].contentItem.title, exact: true }).waitFor();
+
+    await page.route('**/api/learn/ai/capabilities', (route) => {
+      if (route.request().resourceType() === 'fetch')
+        return route.fulfill({ json: { success: true, data: { gemini: true } } });
+      return route.continue();
+    });
+    await page.route('**/api/writing-prompts/*/ai/**', async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path.endsWith('/outline')) {
+        assert.equal(route.request().method(), 'POST');
+        return route.fulfill({
+          json: { success: true, data: { text: 'Fixture outline covering two ideas.' } },
+        });
+      }
+      if (path.endsWith('/draft/coach-chat')) {
+        assert.deepEqual(route.request().postDataJSON(), {
+          text: 'I read books every day.',
+          context: 'How do I start?',
+        });
+        return route.fulfill({ json: { success: true, data: { text: 'Fixture answer for the learner.' } } });
+      }
+      return route.continue();
+    });
+    await page.goto(new URL('/study/content/writing/english-first-steps-4', base).href);
+    await page.getByRole('heading', { name: 'Trợ lý viết', exact: true }).waitFor();
+    await button(page, 'Lập dàn ý').click();
+    await button(page, 'Nhận hướng dẫn').click();
+    await page.getByText('Fixture outline covering two ideas.', { exact: true }).waitFor();
+    await button(page, 'Start writing').click();
+    await page.getByLabel('Bài viết của bạn', { exact: true }).fill('I read books every day.');
+    await button(page, 'Hỏi trợ lý').click();
+    await page.getByLabel('Câu hỏi cho trợ lý', { exact: true }).fill('How do I start?');
+    await button(page, 'Nhận góp ý bản nháp').click();
+    await page.getByText('Fixture answer for the learner.', { exact: true }).waitFor();
+    let gradedSubmission;
+    await page.route('**/api/study/lessons/english-first-steps-4/attempts', async route => {
+      if (!gradedSubmission) return route.continue();
+      const response = await route.fetch();
+      const payload = await response.json();
+      payload.data = payload.data.map(item => item.id === gradedSubmission.id ? gradedSubmission : item);
+      return route.fulfill({ response, json: payload });
+    });
+    await page.route('**/api/study/attempts/*/feedback', async route => {
+      const id = new URL(route.request().url()).pathname.split('/').at(-2);
+      const history = await route.fetch({
+        url: new URL('/api/study/lessons/english-first-steps-4/attempts', base).href,
+        method: 'GET',
+        postData: undefined,
+      });
+      const submitted = (await history.json()).data.find(item => item.id === id);
+      assert.equal(submitted.state, 'SUBMITTED');
+      gradedSubmission = { ...submitted, state: 'COMPLETED', score: 80,
+        feedback: { score: 80, strengths: ['Clear idea'], improvements: [], criteria: [], segments: [] } };
+      return route.fulfill({ json: { success: true, data: gradedSubmission } });
+    });
+    await page.route('**/api/writing-submissions/*/ai/**', (route) => {
+      const action = new URL(route.request().url()).pathname.split('/').at(-1);
+      if (action === 'band-estimate')
+        return route.fulfill({
+          json: {
+            success: true,
+            data: {
+              overallBand: 6.5,
+              cefrLevel: 'B2',
+              rationale: 'Fixture band rationale.',
+              confidence: 'medium',
+            },
+          },
+        });
+      if (action === 'generate-practice')
+        return route.fulfill({
+          json: {
+            success: true,
+            data: {
+              questions: [
+                {
+                  prompt: 'Pick the correct spelling.',
+                  options: ['books', 'bookss'],
+                  answer: 0,
+                  explanation: 'Use books.',
+                },
+              ],
+            },
+          },
+        });
+      if (action === 'create-flashcards')
+        return route.fulfill({
+          json: {
+            success: true,
+            data: {
+              cards: [{ front: 'books', back: 'sách' }],
+            },
+          },
+        });
+      return route.continue();
+    });
+    await button(page, 'Nộp bài').click();
+    await page.getByText('Đã nộp bài. Bạn có thể xem lại trong lịch sử.', { exact: true }).first().waitFor();
+    await page.goto(new URL('/study/content/writing/english-first-steps-4/result', base).href);
+    await button(page, 'Chấm và nhận phản hồi AI').click();
+    await button(page, 'Ước lượng band').click();
+    await page.getByText('Fixture band rationale.', { exact: true }).waitFor();
+    await button(page, 'Sinh bài luyện').click();
+    await button(page, 'books').click();
+    await button(page, 'Xem điểm bài luyện').click();
+    await page.getByRole('heading', { name: '100/100 · 1/1 câu đúng' }).waitFor();
+    await button(page, 'Tạo Flashcard từ bài viết').click();
+    await page.getByText('books · sách', { exact: true }).waitFor();
+    console.log('PASS: related Listening navigation and Writing prep/draft tools with simulated Gemini');
+  } finally {
+    await context.close();
+  }
+}
+
 async function verifyPhoneFlows() {
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
@@ -258,6 +389,7 @@ try {
   await verifyLearning();
   await verifyPhoneFlows();
   await verifyNavigation();
+  await verifyWritingAndListeningTools();
 } finally {
   await browser.close();
 }

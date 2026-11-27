@@ -1,3 +1,4 @@
+import { WritingDraftTools, WritingResultTools, WritingStudyAids } from '@/components/WritingTools';
 import { LanguageCoach } from '../../components/LanguageCoach';
 import React, { useState } from 'react';
 import { View } from 'react-native';
@@ -80,7 +81,6 @@ export function PracticeContent({
   const [audio, setAudio] = useState<Recording>();
   const [audioId, setAudioId] = useState<string>();
   const [draftId, setDraftId] = useState<string>();
-  const [outline, setOutline] = useState('');
   const [kind, setKind] = useState<Annotation['kind']>('HIGHLIGHT');
   const [quote, setQuote] = useState('');
   const [note, setNote] = useState('');
@@ -232,30 +232,7 @@ export function PracticeContent({
               />
               <Copy>{text.trim().split(/\s+/).filter(Boolean).length} từ</Copy>
               {ai.data?.gemini && (
-                <Button
-                  label="Nhận gợi ý sửa bản nháp"
-                  secondary
-                  disabled={action.busy || !text.trim()}
-                  onPress={() =>
-                    void action.run(async () => {
-                      const result = await api<{ text: string }>('/learn/ai', {
-                        token: auth.token,
-                        method: 'POST',
-                        timeoutMs: 55_000,
-                        body: {
-                          task: 'writing-revision',
-                          text: `Đề bài: ${lesson.body.slice(0, 3500)}\nBản nháp: ${text.slice(0, 6400)}`,
-                        },
-                      });
-                      setOutline(result.text);
-                    })
-                  }
-                />
-              )}
-              {!!outline && (
-                <Panel>
-                  <Copy selectable>{outline}</Copy>
-                </Panel>
+                <WritingDraftTools key={draftId ?? 'new'} promptId={lesson.publicId} draft={text} />
               )}
             </>
           ) : (
@@ -388,6 +365,12 @@ export function PracticeContent({
                 ) : (
                   <FeedbackView feedback={selected.feedback} />
                 ))}
+              {writing && selected.state === 'COMPLETED' && ai.data?.gemini && (
+                <>
+                  <WritingResultTools key={selected.id} submissionId={selected.publicId} />
+                  <WritingStudyAids key={selected.id + ':practice'} submissionId={selected.publicId} />
+                </>
+              )}
             </Panel>
           )}
         </Section>
