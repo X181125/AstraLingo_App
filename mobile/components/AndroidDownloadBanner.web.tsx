@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from "react-native";
+import { Text } from "@/components/typography";
 import { Ionicons } from '@expo/vector-icons';
 import { colors as c, heading } from '../src/theme';
 

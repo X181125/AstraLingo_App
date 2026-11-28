@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text } from 'react-native';
+import { View } from "react-native";
+import { Text } from "@/components/typography";
 import { router } from 'expo-router';
 import { Artwork } from './Artwork';
 import { Button } from './UI';

@@ -1,5 +1,7 @@
+import { narrations } from './narration.js';
 import { PrismaClient, ContentType } from '@prisma/client';
 import { hash } from 'bcryptjs';
+import { practiceData } from './practice-data.js';
 
 export async function seed(db: PrismaClient, demo = false) {
   const categories = [
@@ -22,8 +24,12 @@ export async function seed(db: PrismaClient, demo = false) {
     await db.course.upsert({ where: { id: course.id }, create: data, update: data });
     for (let index = 0; index < topics.length; index++) {
       const skill = { reading: 'READING', listening: 'LISTENING', speaking: 'SPEAKING', writing: 'WRITING' }[course.categoryId] ?? ['READING', 'LISTENING', 'SPEAKING', 'WRITING'][index];
-      const lesson = { id: `${course.id}-${index + 1}`, courseId: course.id, title: topics[index], order: index + 1, minutes: 10, contentType: skill as ContentType,
-        preview: `Bài ${index + 1}: ${topics[index]}. Mục tiêu: làm quen từ vựng theo ngữ cảnh và luyện kỹ năng ${skill.toLowerCase()}. Nội dung thực hành sẽ được triển khai ở giai đoạn Study.` };
+      const lessonId = `${course.id}-${index + 1}`;
+      const clip = narrations[lessonId];
+      const practice = clip ? { ...practiceData[lessonId], transcript: clip.transcript } : practiceData[lessonId];
+      const lesson = { id: lessonId, courseId: course.id, title: topics[index], order: index + 1, minutes: 10, contentType: skill as ContentType,
+         ...(clip ? {detail:{audioUrl:clip.audioUrl, durationSec:clip.durationSec}} : {}),
+        preview: practice?.body.slice(0, 180) ?? topics[index], ...(practice ? { practice } : {}) };
       await db.contentItem.upsert({ where: { id: lesson.id }, create: lesson, update: lesson });
     }
   }

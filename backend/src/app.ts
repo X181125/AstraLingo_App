@@ -1,3 +1,16 @@
+import { openApiDocument } from './openapi.js';
+import { questionBank } from './question-bank.js';
+import { speechReviewRoutes } from './speech-review.js';
+import { recordingRoutes } from './recordings.js';
+import { passageWordRoutes } from './passage-words.js';
+import { passageRoutes } from './passage.js';
+import { tutorRoutes } from './tutor.js';
+import { assessmentRoutes } from './assessments.js';
+import { submissionRoutes } from './submissions.js';
+import { catalogRoutes } from './catalog.js';
+import { flashcardRoutes } from './flashcards.js';
+import { dictionaryRouter } from "./dictionary.js";
+import { examRoutes } from "./exams.js";
 import express, { type NextFunction, type Request, type Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -9,14 +22,14 @@ import { createHmac, randomInt, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { Config } from './config.js';
 import type { SendReset } from './mail.js';
+import { ApiError, ok } from './http.js';
+import { accountRouter, publicUser, sessionRouter, startSession } from './account.js';
+import { studyRouter } from './study.js';
+import { vocabularyRouter } from './vocabulary.js';
 
-class ApiError extends Error {
-  constructor(public status: number, message: string) { super(message); }
-}
 const email = z.string().trim().toLowerCase().email('Email chưa đúng định dạng.').max(254);
 const password = z.string().min(8, 'Mật khẩu cần ít nhất 8 ký tự.')
   .refine(value => Buffer.byteLength(value, 'utf8') <= 72, 'Mật khẩu quá dài (tối đa 72 byte).');
-const publicUser = { id: true, name: true, email: true, nativeLang: true, targetLang: true, level: true, createdAt: true } as const;
 const genericReset = 'Nếu email đã đăng ký, mã xác nhận sẽ được gửi. Vui lòng kiểm tra hộp thư.';
 
 export function createApp(db: PrismaClient, config: Config, sendReset: SendReset) {
@@ -32,18 +45,25 @@ export function createApp(db: PrismaClient, config: Config, sendReset: SendReset
     const local = config.NODE_ENV !== 'production' && /^http:\/\/(localhost|127\.0\.0\.1|10\.[\d.]+|192\.168\.[\d.]+|172\.(1[6-9]|2\d|3[01])\.[\d.]+):\d+$/.test(origin ?? '');
     cb(null, !origin || origins.includes(origin) || local);
   } }));
+  const mediaLimit = rateLimit({ windowMs: 60_000, limit: 12, standardHeaders: 'draft-8', legacyHeaders: false,
+    message: { error: { status: 429, message: 'Vui lòng chờ trước khi tải tệp hoặc gọi AI tiếp.' } } });
+  app.post(['/api/study/audio', '/api/learn/ai'], mediaLimit, authenticated, express.json({ limit: '6mb' }));
+  app.post('/api/study/attempts/:id/feedback', mediaLimit);
+  app.post('/api/study/lessons', authenticated, express.json({ limit: '128kb' }));
+  app.put('/api/study/lessons/:id', authenticated, express.json({ limit: '128kb' }));
+  app.post('/api/ai/visual-vocabulary', authenticated, express.json({limit:'6mb'}));
+  app.post('/api/writing-prompts/:id/ai/draft/:task', authenticated, express.json({ limit: '96kb' }));
   app.use(express.json({ limit: '32kb' }));
-  const ok = (res: Response, data: unknown, status = 200) => res.status(status).json({ success: true, data });
+  app.get('/api/openapi.json', (_req, res) => res.json(openApiDocument));
   const authLimit = rateLimit({ windowMs: 15 * 60_000, limit: 30, standardHeaders: 'draft-8', legacyHeaders: false,
     message: { error: { status: 429, message: 'Bạn thử quá nhiều lần. Vui lòng thử lại sau 15 phút.' } } });
   const resetLimit = rateLimit({ windowMs: 60 * 60_000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false,
     message: { error: { status: 429, message: 'Đã đạt giới hạn yêu cầu mã. Vui lòng thử lại sau.' } } });
-  app.use(['/api/auth/register', '/api/auth/login', '/api/auth/forgot-password', '/api/auth/reset-password'], authLimit);
+  app.use(['/api/auth/register', '/api/auth/login', '/api/auth/forgot-password', '/api/auth/reset-password',
+    '/api/auth/refresh', '/api/auth/social/start', '/api/auth/social/complete'], authLimit);
   const digest = (address: string, code: string) => createHmac('sha256', config.JWT_SECRET).update(`${address}:${code}`).digest('hex');
-  const token = (user: { id: string; tokenVersion: number }) => jwt.sign({ ver: user.tokenVersion }, config.JWT_SECRET, {
-    subject: user.id, expiresIn: '7d', issuer: 'astralingo', audience: 'astralingo-app', algorithm: 'HS256',
-  });
   async function authenticated(req: Request, res: Response, next: NextFunction) {
+    if (res.locals.user) return next();
     const bearer = req.headers.authorization;
     if (!bearer?.startsWith('Bearer ')) throw new ApiError(401, 'Vui lòng đăng nhập để tiếp tục.');
     let payload: jwt.JwtPayload;
@@ -58,23 +78,38 @@ export function createApp(db: PrismaClient, config: Config, sendReset: SendReset
     next();
   }
 
+  app.use('/api', tutorRoutes(db, config, authenticated, mediaLimit));
+  app.use('/api/media/listening', express.static('resources/listening', {index:false, dotfiles:'deny'}));
+  app.use('/api', recordingRoutes(db, config, authenticated, mediaLimit));
+  app.use('/api', passageWordRoutes(db, authenticated));
+  app.use('/api', questionBank(db, config, authenticated, mediaLimit));
+  app.use('/api', speechReviewRoutes(db, config, authenticated, mediaLimit));
+  app.use('/api', passageRoutes(db, authenticated));
+  app.use('/api', assessmentRoutes(db, config, authenticated, mediaLimit));
+  app.use('/api', submissionRoutes(db, config, authenticated, mediaLimit));
+  app.use('/api', catalogRoutes(db, authenticated));
+  app.use('/api', flashcardRoutes(db, authenticated));
+  app.use('/api/words', dictionaryRouter(authenticated));
+  app.use('/api/exams', examRoutes(db, authenticated));
   app.get('/api/health', async (_req, res) => {
     await db.$queryRaw`SELECT 1`;
     ok(res, { status: 'ok', app: 'AstraLingo', database: 'connected' });
   });
   app.post('/api/auth/register', async (req, res) => {
-    const input = z.object({ name: z.string().trim().min(2, 'Tên cần ít nhất 2 ký tự.').max(60), email, password }).parse(req.body);
+    const input = z.object({ name: z.string().trim().min(2, 'Tên cần ít nhất 2 ký tự.').max(60), email, password, supportsRefresh: z.boolean().default(false) }).parse({ ...req.body, name: req.body?.name ?? req.body?.fullName });
     const user = await db.user.create({ data: { name: input.name, email: input.email, passwordHash: await hash(input.password, 12) } });
-    const safe = await db.user.findUniqueOrThrow({ where: { id: user.id }, select: publicUser });
-    ok(res, { user: safe, token: token(user) }, 201);
+    const session = await startSession(db, config, user.id, user.tokenVersion, input.supportsRefresh);
+    ok(res, { ...session, id: user.id, user: { ...session.user, fullName: user.name } }, 201);
   });
   app.post('/api/auth/login', async (req, res) => {
-    const input = z.object({ email, password: z.string().min(1).refine(value => Buffer.byteLength(value, 'utf8') <= 72, 'Mật khẩu quá dài (tối đa 72 byte).') }).parse(req.body);
+    const input = z.object({ email, password: z.string().min(1).refine(value => Buffer.byteLength(value, 'utf8') <= 72, 'Mật khẩu quá dài (tối đa 72 byte).'),
+      supportsRefresh: z.boolean().default(false) }).parse(req.body);
     const user = await db.user.findUnique({ where: { email: input.email } });
     // A fixed valid bcrypt hash keeps missing-account comparisons on the same slow path.
     const valid = await compare(input.password, user?.passwordHash ?? '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYwAQJC0vBaIvTUsWEIWRWgvJm6R8jB.');
     if (!user || !valid) throw new ApiError(401, 'Email hoặc mật khẩu chưa chính xác.');
-    ok(res, { token: token(user), user: await db.user.findUnique({ where: { id: user.id }, select: publicUser }) });
+    const session = await startSession(db, config, user.id, user.tokenVersion, input.supportsRefresh);
+    ok(res, { ...session, user: { ...session.user, fullName: user.name } });
   });
   app.get('/api/auth/me', authenticated, async (_req, res) => {
     ok(res, await db.user.findUnique({ where: { id: res.locals.user.id }, select: publicUser }));
@@ -156,9 +191,12 @@ export function createApp(db: PrismaClient, config: Config, sendReset: SendReset
     ok(res, { items, total, page: q.page, hasMore: q.page * q.limit < total });
   });
   app.get('/api/courses/:id', async (req, res) => {
-    const course = await db.course.findUnique({ where: { id: String(req.params.id) }, include: { category: true, lessons: { where: { status: 'PUBLISHED' }, orderBy: { order: 'asc' } } } });
+    const course = await db.course.findUnique({ where: { id: String(req.params.id) }, include: { category: true, lessons: {
+      where: { status: 'PUBLISHED', ownerId: null }, orderBy: { order: 'asc' },
+      select: { id: true, courseId: true, title: true, contentType: true, status: true, order: true, minutes: true, preview: true, practice: true },
+    } } });
     if (!course || course.language !== 'en') throw new ApiError(404, 'Không tìm thấy khóa học.');
-    ok(res, course);
+    ok(res, { ...course, lessons: course.lessons.map(({ practice, ...lesson }) => ({ ...lesson, hasPractice: practice !== null })) });
   });
   app.get('/api/me/enrollments', authenticated, async (_req, res) => {
     ok(res, await db.enrollment.findMany({ where: { userId: res.locals.user.id, course: { language: 'en' } }, include: { course: { include: { category: true } } }, orderBy: { createdAt: 'desc' } }));
@@ -174,6 +212,10 @@ export function createApp(db: PrismaClient, config: Config, sendReset: SendReset
       ok(res, await db.enrollment.findUniqueOrThrow({ where: { userId_courseId: { userId, courseId } } }));
     }
   });
+  app.use('/api/auth', sessionRouter(db, config));
+  app.use('/api/account', accountRouter(db, config, authenticated));
+  app.use('/api/study', studyRouter(db, config, authenticated));
+  app.use('/api/learn', vocabularyRouter(db, config, authenticated));
   app.use((_req, _res) => { throw new ApiError(404, 'API không tồn tại.'); });
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (error instanceof z.ZodError) return res.status(400).json({ error: { status: 400, message: error.issues[0].message } });

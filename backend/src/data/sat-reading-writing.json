@@ -1,0 +1,90 @@
+[
+  {
+    "number": 4,
+    "modules": [
+      "BAACABDBBDCDABCAAAADDDBCBACDAADDC",
+      "DDBBBBACCAABDCCABDCABDDABBAACCAAB"
+    ],
+    "modulePages": [
+      4,
+      18
+    ]
+  },
+  {
+    "number": 5,
+    "modules": [
+      "ABBDBDBCBBDADBCBABACADBDBBDDBDACD",
+      "CDAACCBAADADDDDBAABACBACCBCDDADDA"
+    ],
+    "modulePages": [
+      4,
+      18
+    ]
+  },
+  {
+    "number": 6,
+    "modules": [
+      "DBBDDABBDDAAACBDDBACDDDCBDDCCBABC",
+      "CDCBBCDCCCCCCDDBADCAACBADBDABCDBC"
+    ],
+    "modulePages": [
+      4,
+      18
+    ]
+  },
+  {
+    "number": 7,
+    "modules": [
+      "ADBBAAACAADDABABCDADDCCADDADACBCD",
+      "CDCDBABBDBBDCCDDBBDDCCCABDBDADCAC"
+    ],
+    "modulePages": [
+      4,
+      20
+    ]
+  },
+  {
+    "number": 8,
+    "modules": [
+      "BDACCCDAADBCAADCADCBBADCCDABCACAD",
+      "BABDDACAADBCDBCACDABCACABAAACBDBD"
+    ],
+    "modulePages": [
+      4,
+      18
+    ]
+  },
+  {
+    "number": 9,
+    "modules": [
+      "ADCCBCAACADCDCADBAAABCCCABABDBBAC",
+      "BCBBCDDDAADADCCDBDCDCCBDCCCABCDCB"
+    ],
+    "modulePages": [
+      4,
+      18
+    ]
+  },
+  {
+    "number": 10,
+    "modules": [
+      "ABBACBDDCCCBAAAACDCBACCCCCABBBBCC",
+      "AADAADBBDDDABADAAADBDCADAABDADDAC"
+    ],
+    "modulePages": [
+      4,
+      18
+    ]
+  },
+  {
+    "number": 11,
+    "modules": [
+      "ACDDABBDDCBDADBADDDDABBADDDAACADB",
+      "CCCDBBBABCBDCBCCAABBBBBBABDBCBCAA"
+    ],
+    "modulePages": [
+      4,
+      18
+    ]
+  }
+]
